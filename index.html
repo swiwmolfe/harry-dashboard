@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harry's Summer 2026 - Daily Dashboard</title>
+<style>
+  :root{
+    --navy:#1F3A5F; --accent:#C8102E; --green:#2E7D32; --gray:#444;
+    --line:#e2e8f0; --bg:#f5f7fa; --card:#ffffff;
+    --resp:#8e44ad; --read:#2E7D32; --math:#2563eb; --sharon:#C8102E; --code:#d97706;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#1f2937;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.45}
+  .wrap{max-width:860px;margin:0 auto;padding:18px 16px 60px}
+  header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  h1{font-size:22px;margin:0;color:var(--accent);letter-spacing:.3px}
+  .sub{color:#6b7280;font-size:13px;margin:2px 0 0}
+  .streak{background:var(--navy);color:#fff;border-radius:12px;padding:8px 14px;text-align:center;min-width:96px}
+  .streak b{display:block;font-size:22px;line-height:1}
+  .streak span{font-size:11px;opacity:.85;text-transform:uppercase;letter-spacing:.5px}
+  .navbar{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:12px 0}
+  .navbar button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 12px;font-size:14px;cursor:pointer}
+  .navbar button:hover{background:#f0f4f8}
+  .navbar .where{flex:1;text-align:center;font-weight:600;color:var(--navy)}
+  .navbar .where small{display:block;font-weight:400;color:#6b7280;font-size:12px}
+  .today-btn{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important}
+  .dayprogress{height:6px;background:#e5e9f0;border-radius:4px;overflow:hidden;margin:0 0 14px}
+  .dayprogress > div{height:100%;background:var(--green);width:0;transition:width .25s}
+  .card{background:var(--card);border:1px solid var(--line);border-left:5px solid #ccc;border-radius:12px;margin-bottom:12px;overflow:hidden}
+  .card.t-responsibility{border-left-color:var(--resp)} .card.t-reading{border-left-color:var(--read)}
+  .card.t-math{border-left-color:var(--math)} .card.t-sharon{border-left-color:var(--sharon)} .card.t-coding{border-left-color:var(--code)}
+  .card .head{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer}
+  .chk{width:26px;height:26px;border-radius:7px;border:2px solid #cbd5e1;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:#fff;cursor:pointer}
+  .chk.on{background:var(--green);border-color:var(--green)}
+  .chk.on::after{content:"";width:7px;height:12px;border:solid #fff;border-width:0 3px 3px 0;transform:rotate(45deg);margin-top:-2px}
+  .titles{flex:1;min-width:0}
+  .titles .k{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;font-weight:700}
+  .titles .v{font-weight:600;color:#111827;font-size:15px}
+  .titles .v small{font-weight:400;color:#6b7280}
+  .caret{color:#9aa7b5;font-size:13px;transition:transform .2s}
+  .card.open .caret{transform:rotate(90deg)}
+  .body{display:none;padding:0 14px 14px 52px}
+  .card.open .body{display:block}
+  .body p{margin:8px 0}
+  .prompt{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+  .prompt b{color:var(--navy)}
+  .choice{display:inline-flex;gap:6px;margin:4px 0}
+  .choice button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 16px;cursor:pointer;font-size:14px}
+  .choice button.sel{background:var(--navy);color:#fff;border-color:var(--navy)}
+  ul.tasks{margin:6px 0;padding-left:18px}
+  ul.tasks li{margin:3px 0;font-size:14px}
+  .done-list{list-style:none;padding:0;margin:8px 0}
+  .done-list li{font-size:13px;color:#475569;padding:2px 0 2px 20px;position:relative}
+  .done-list li::before{content:"\2610";position:absolute;left:0;color:var(--navy)}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;color:#fff;margin-left:6px}
+  .pill.game{background:var(--accent)} .pill.app{background:var(--green)}
+  .rest{background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:#6b7280}
+  .section-h{font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:#94a3b8;font-weight:700;margin:26px 0 8px}
+  .mapgrid{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;overflow-x:auto}
+  table.map{border-collapse:collapse;font-size:12px;margin:0 auto}
+  table.map th{color:#94a3b8;font-weight:600;padding:3px 6px}
+  table.map td{text-align:center;padding:3px}
+  .cell{width:26px;height:22px;border-radius:5px;border:1px solid var(--line);cursor:pointer;display:inline-block;line-height:22px;color:#fff;font-size:10px}
+  .weeklabel{color:#6b7280;font-weight:600;padding-right:8px;white-space:nowrap;font-size:12px}
+  .note{font-size:12px;color:#94a3b8;margin-top:10px;text-align:center}
+  /* tutor + scratchpad */
+  .tutor{margin-top:10px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .tutor .hint{font-size:12px;color:#94a3b8;padding:8px 10px 4px}
+  .tutor .log{max-height:280px;overflow:auto;padding:10px;background:#fbfdff;display:flex;flex-direction:column;gap:8px}
+  .msg{padding:8px 11px;border-radius:12px;font-size:14px;max-width:88%;white-space:pre-wrap;word-wrap:break-word}
+  .msg.bot{background:#eef4fb;color:#1f2937;align-self:flex-start;border-bottom-left-radius:3px}
+  .msg.me{background:var(--navy);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+  .msg pre.code{background:#0b1220;color:#d1e7ff;padding:8px 10px;border-radius:8px;overflow:auto;font-size:12.5px;margin:6px 0;white-space:pre;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .msg code{background:rgba(0,0,0,.07);padding:1px 4px;border-radius:4px;font-size:.92em;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .msg.me code{background:rgba(255,255,255,.18)}
+  .tutor .row{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line);background:#fff}
+  .tutor input.msgin{flex:1;border:1px solid var(--line);border-radius:8px;padding:9px}
+  .tutor button.send{background:var(--math);color:#fff;border:none;border-radius:8px;padding:9px 16px;cursor:pointer}
+  .tprog{display:flex;align-items:center;gap:8px;padding:0 10px 8px}
+  .tprogbar{flex:1;height:7px;background:#e5e9f0;border-radius:4px;overflow:hidden}
+  .tprogbar .fill{height:100%;width:0;background:var(--math);transition:width .3s}
+  .tproglbl{font-size:11px;color:#6b7280;white-space:nowrap;font-weight:600}
+  .tutor button.attach{background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;color:var(--navy);font-size:13px}
+  .imgprev{padding:6px 10px;display:flex;gap:8px;align-items:center}
+  .imgprev img{height:44px;border-radius:6px;border:1px solid var(--line)}
+  .imgprev .rm{border:none;background:#e5e9f0;border-radius:50%;width:22px;height:22px;cursor:pointer;line-height:1}
+  .msg img.shot{max-width:100%;border-radius:8px;margin-top:6px;display:block;border:1px solid rgba(0,0,0,.12)}
+  .journal{margin-top:10px}
+  .jlabel{display:block;font-size:12px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px}
+  .jarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit;font-size:14px;resize:vertical;outline:none}
+  .jarea:focus{border-color:var(--navy)}
+  .savednote{font-size:11px;color:var(--green);margin-left:4px;font-weight:600}
+  .setup{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--code);border-radius:12px;margin:12px 0;overflow:hidden}
+  .setup .shead{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+  .setup .shead .k{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;font-weight:700}
+  .setup .shead .v{font-weight:700;color:var(--navy);font-size:15px}
+  .setup .caret{color:#9aa7b5;font-size:13px;transition:transform .2s}
+  .setup.open .shead .caret{transform:rotate(90deg)}
+  .setup .sbody{display:none;padding:0 14px 12px}
+  .setup.open .sbody{display:block}
+  .setupitem{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+  .setupitem .txt{font-size:14px}
+  .setupitem .txt small{display:block;color:#6b7280;font-size:12.5px;margin-top:1px}
+  .linkrow{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 2px}
+  .linkrow .lk{flex:1;min-width:190px}
+  .linkrow label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;font-weight:700;margin-bottom:3px}
+  .linkrow input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:13px;outline:none}
+  .linkrow input:focus{border-color:var(--navy)}
+  .portfolio{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 14px 12px}
+  .pfrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+  .pfrow:first-child{border-top:none}
+  .pfrow .wk{color:#94a3b8;font-weight:700;font-size:12px;width:38px}
+  .pfrow .nm{flex:1;min-width:0}
+  .pfrow a{font-size:12.5px;color:var(--math);text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:3px 9px}
+  .pfrow .none{font-size:12px;color:#cbd5e1}
+  .past{padding:2px 0}
+  .pastweek{margin:6px 0}
+  .pastwk{font-size:12px;font-weight:700;color:var(--navy);margin:8px 0 2px}
+  .pastitem{border-left:3px solid var(--line);padding:2px 0 2px 10px;margin:4px 0}
+  .pastlbl{font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .pasttxt{font-size:13px;color:#475569;white-space:pre-wrap}
+  details.det > summary{cursor:pointer;color:var(--navy);font-size:13px;margin-top:8px}
+  .pad{margin-top:8px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .pad .bar{display:flex;gap:6px;align-items:center;padding:6px 8px;background:#f5f7fa;border-bottom:1px solid var(--line)}
+  .pad select,.pad .runbtn{border:1px solid var(--line);border-radius:6px;padding:4px 12px;background:#fff;cursor:pointer;font-size:13px}
+  .pad textarea{width:100%;border:none;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;min-height:80px;resize:vertical;outline:none}
+  .pad .out{background:#0b1220;color:#d1e7ff;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;padding:9px 10px;white-space:pre-wrap;min-height:20px;max-height:180px;overflow:auto}
+  .mini{background:#eef7ee;border:1px solid #cde9cd;border-radius:8px;padding:9px 11px;font-size:13px;margin:8px 0}
+  .mini b{color:var(--green)}
+  .sblink{font-size:13px;color:#92400e;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin:8px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Harry's Summer 2026</h1>
+      <p class="sub">Ship something real every week. Check off each track as you go.</p>
+    </div>
+    <div class="streak"><b id="streakNum">0</b><span>day streak</span></div>
+  </header>
+
+  <div id="setupWrap"></div>
+
+  <div class="navbar">
+    <button id="prev">&#8592; Prev</button>
+    <div class="where">
+      <span id="whereMain">Week 1 &middot; Day 1</span>
+      <small id="whereSub"></small>
+    </div>
+    <button id="today" class="today-btn">Today</button>
+    <button id="next">Next &#8594;</button>
+  </div>
+  <div class="dayprogress"><div id="dayBar"></div></div>
+
+  <div id="cards"></div>
+
+  <div class="section-h">Portfolio &middot; shipped projects</div>
+  <div class="portfolio" id="portfolio"></div>
+
+  <div class="section-h">Progress map &middot; whole summer</div>
+  <div class="mapgrid"><div id="map"></div><div class="note">Tap any square to jump to that day. Green = all five tracks done.</div></div>
+
+  <p class="note">Progress saves in this browser. Set your real start date at the top of index.html (START_DATE). The math tutor needs the site deployed (see DEPLOY.md).</p>
+</div>
+
+<script>
+"use strict";
+
+// ============ CONFIG ============
+const START_DATE = "2026-07-06"; // Monday of week 1 - change to Harry's real start date
+const TRACKS = [
+  {key:"responsibility", label:"Responsibility"},
+  {key:"reading",        label:"Reading"},
+  {key:"math",           label:"Math"},
+  {key:"sharon",         label:"Sharon Buddies"},
+  {key:"coding",         label:"Coding"},
+];
+
+// ============ CONTENT: READING ============
+const reading = {
+  1:{book:"Death in the Clouds", from:1,  to:75,  prompt:"List the suspects as you meet them, with each alibi. Who looks guiltiest, and why?"},
+  2:{book:"Death in the Clouds", from:76, to:150, prompt:"A mystery is 'fair' when every clue is on the page. Note two clues Christie plants that might matter."},
+  3:{book:"Death in the Clouds", from:151,to:225, prompt:"Who's your prime suspect now, and what changed your mind? What is Poirot noticing that others miss?"},
+  4:{book:"Death in the Clouds (finish)", from:226,to:300, prompt:"Did the solution feel earned? Which clue did you underrate, and why did it slip past you?"},
+  5:{book:"The Thrashers", from:1,  to:88,  prompt:"Meet the Thrashers. What does Jodi gain, and give up, to be part of the group?"},
+  6:{book:"The Thrashers", from:89, to:176, prompt:"Name one thing you don't fully trust the narrator about. What is Soto revealing vs. holding back?"},
+  7:{book:"The Thrashers", from:177,to:264, prompt:"Pick a character and describe one choice driven by wanting to belong. What did it cost them?"},
+  8:{book:"The Thrashers (finish)", from:265,to:352, prompt:"Now that you know the ending, which earlier scene reads differently? Then compare the two books: how does each build suspense and handle the truth?"},
+};
+function readingForDay(w,d){
+  const r=reading[w]; const total=r.to-r.from+1; const per=Math.ceil(total/6);
+  const a=r.from+per*(d-1); let b=Math.min(r.from+per*d-1, r.to);
+  if(a>r.to) return {book:r.book, pages:"Book finished - reread a favorite scene or bank a buffer day.", prompt:r.prompt};
+  return {book:r.book, pages:"pp. "+a+"-"+b, prompt:r.prompt};
+}
+
+// ============ CONTENT: MATH ============
+const mathTheme = {
+  1:"Number sense (Java-ready)", 2:"Number bases & bits", 3:"Inequalities & compound conditions",
+  4:"Functions & relationships", 5:"Ratios, percents, rounding, modular", 6:"Sequences, counting & loops",
+  7:"Logic, decision tables & tracing", 8:"Coordinate geometry + capstone"
+};
+const mathWk1 = ["Order of operations","Whole-number division and remainder (/ and %)","Negatives, absolute value, comparisons","Variables and translating words","Boolean logic (AND, OR, NOT)","Review + predict the Java output"];
+function mathForDay(w,d){
+  if(w===1) return {topic:mathWk1[d-1], note:"Full problems + answer key are in your Week 1 Starter Pack - or work them with the tutor below."};
+  return {topic:mathTheme[w], note:"Today's set: Math Weeks 2-8 packet, Week "+w+" Day "+d+" (answer key at the end of that week)."};
+}
+const mathProblems = {
+  1:["5 + 2 x 3","(5 + 2) x 3","20 - 4 x 3 + 2","2 + 3^2","(2 + 3)^2","48 / 8 / 2","10 - (6 - 2) x 2","3 x 4 - 2 x 5"],
+  2:["13 / 4 and 13 % 4","20 / 5 and 20 % 5","9 / 10 and 9 % 10","100 / 7 and 100 % 7","45 % 10","8 % 2","7 % 2","23 % 1"],
+  3:["-4 + 9","3 - 10","-5 - 6","|-12|","|7 - 10|","-2 x 5","True or false: -3 < -1","True or false: 6 <= 6"],
+  4:["x=3, y=5:  x + y","x=3, y=5:  2x + y","x=3, y=5:  xy - 4","x=3, y=5:  (x + y)/2  (whole-number division)","x=3, y=5:  y % x","Write as an expression: 'five less than n'","Write as an expression: 'twice n, plus 7'","Write as an expression: 'n squared minus 1'"],
+  5:["true AND true","true AND false","false OR true","false OR false","NOT false","(true AND false) OR true","NOT (true OR false)","(5 > 3) AND (2 > 4)"],
+  6:["7 + 3 x 2","19 % 4","19 / 4  (whole-number division)","|-8| - 3","n=6:  is n % 2 == 0?  (even?)","(4 > 2) AND (3 <= 3)","Write as an expression: 'the remainder when a is divided by b'","In Java, what does System.out.println(7/2) print? And System.out.println(7%2)?"]
+};
+const mathPitfalls = {
+  1:"Reading left-to-right and ignoring that x and / come before + and -; exponent slips; the sign of a subtraction.",
+  2:"Thinking 7/2 = 3.5 in Java (it's 3 - it truncates); confusing the remainder with the quotient; unsure what %10 or %2 reveal.",
+  3:"Sign errors when adding negatives; thinking |-x| is negative; mixing up < and <=.",
+  4:"Substituting in the wrong order; writing 'five less than n' as 5 - n instead of n - 5; confusing 2n with n + 2.",
+  5:"Confusing AND with OR; forgetting NOT flips the whole thing; thinking AND needs only one part true.",
+  6:"Forgetting that integer division truncates; unsure what % means; mixing up the two println outputs."
+};
+function mathTutorCtx(w,d){
+  const m=mathForDay(w,d);
+  return { topic:m.topic+(w===1?"":" (Week "+w+")"), problems:(w===1?mathProblems[d]:[]), pitfalls:(w===1?mathPitfalls[d]:"") };
+}
+
+// ============ CONTENT: CODING ============
+const coding = {
+  1:{title:"Unity arcade game", type:"game", goal:"Re-learn the full path from empty project to something others can play. Keep it tiny.",
+     mini:"GitHub mini-lesson (this week): install GitHub Desktop - it's GitHub with buttons, no typing commands. You'll create your first repository, make your first commit, and 'Publish' it to GitHub. That's how every project this summer gets saved and shown off.",
+     days:["Decide the game (one mechanic). Create the Unity project. Install GitHub Desktop, make the repo through it (no terminal) with a Unity .gitignore, and do your first commit. Block out the scene with placeholder shapes.",
+           "Core mechanic working - the one thing the player does, responding to input and feeling good.",
+           "Add the challenge: obstacles/enemies, collisions, and a lose condition.",
+           "Close the loop: scoring, a clear win/game-over, and restart. Playable start to finish.",
+           "Polish: sound effects, simple art/juice, a title screen and game-over screen.",
+           "SHIP: in GitHub Desktop commit and Publish your final version; build to WebGL and upload to itch.io; write the README; tag v1.0."]},
+  2:{title:"Visual timer (web)", type:"app", goal:"Your first web app. Get the deploy pipeline working on day 1, then build.",
+     days:["Set up in StackBlitz: a plain HTML/CSS/JS project. Get an empty 'hello' showing in the live preview today.",
+           "Build the UI: minutes input, Start / Pause / Reset buttons, a big time display.",
+           "Make it tick: countdown with setInterval, format as mm:ss.",
+           "Finish states: flash/alarm at zero, disable buttons correctly.",
+           "Make it kind: large text, high contrast, a progress ring or bar (accessibility).",
+           "SHIP: README (what/why/controls + screenshot), publish a live link, add it to your portfolio."]},
+  3:{title:"Unity game, polished", type:"game", goal:"A second Unity game with real polish - menus, sound, game feel.",
+     days:["Pick the game; set repo (GitHub Desktop); block out the scene.","Get the core mechanic solid.","Add menus: title, pause, game-over.",
+           "Add audio + game feel (juice).","Balance, playtest, fix bugs.","SHIP: WebGL build to itch.io, commit + publish, README, tag v1.0."]},
+  4:{title:"Routine checklist (web)", type:"app", goal:"Adds saving and loading - the app remembers state between visits.",
+     days:["New StackBlitz project; deploy an empty version; sketch the UI.","Render a task list; add and remove tasks.","Check tasks off; mark complete.",
+           "Persist with localStorage so it survives a refresh.","Polish: clear layout, big touch targets, a daily reset.","SHIP: README, publish live link, portfolio."]},
+  5:{title:"First Unreal game (Blueprints)", type:"game", goal:"Your first Unreal project - all Blueprints, no C++ to learn first.",
+     days:["Install Unreal; new Blueprint project; get comfortable in the editor.","Player pawn + input (Blueprints) moving around.",
+           "One simple goal/mechanic: collect, avoid, or reach.","Win/lose + restart.","Package a build and confirm the packaged app runs.","SHIP: packaged build + itch.io + README + repo."]},
+  6:{title:"Communication board (web)", type:"app", goal:"Taps become spoken words - a simple AAC board using text-to-speech.",
+     days:["New StackBlitz project; plan a grid of picture/word buttons.","Build the button grid.","Wire the Web Speech API: tap a button -> it speaks the word.",
+           "Build a sentence strip from taps; speak the whole sentence.","Accessibility: big buttons, high contrast, simple categories.","SHIP: README, publish live link, portfolio."]},
+  7:{title:"Simple 3v3 arena (Unreal, Blueprints)", type:"game", goal:"The capstone. Local / vs-bots 3v3 - you + 2 ally bots vs 3 enemy bots. Simple on purpose.",
+     days:["New Unreal Blueprint project; arena blockout; player controller.","Player action/ability (one simple thing).",
+           "AI bots: a basic enemy that moves and targets (Blueprints AI).","Teams: 3 vs 3; a team wins when the other is down.",
+           "HUD: team scores/health, win screen, restart. Balance it.","SHIP: packaged build + itch.io + README + repo. Capstone done."]},
+  8:{title:"API-powered app + portfolio polish", type:"app", goal:"Pull live data from an API, then polish all 8 projects into a portfolio.",
+     days:["Pick a simple public API (weather, dictionary, jokes). New StackBlitz project; deploy empty.","Fetch from the API and show the result.",
+           "Add input (a search/query) that drives the fetch.","Handle loading and errors gracefully.",
+           "Portfolio polish: revisit all 8 repos, clean READMEs, check links, build a simple index page listing every project.",
+           "SHIP: final app live + the portfolio index page. Summer complete."]},
+};
+const doneApp = ["Live on a public URL.","Works on a phone screen.","GitHub repo public, with a README (what it is, how to use it, screenshot).","Commits from across the week.","Link added to your portfolio list."];
+const doneGame = ["Playable from a menu through to game-over and back - no dead ends.","Build runs from a public link (itch.io).","GitHub repo public, with a .gitignore and a README (title, controls, screenshot).","Release tagged v1.0.","Link added to your portfolio list."];
+
+// ============ CONTENT: SHARON BUDDIES ============
+const sharonWk1 = [
+  "Brain-dump. Write everything you remember about how Boerne Buddies worked, and what you'd want YOUR version to feel like. No filtering yet.",
+  "Define the 'who'. Who is this for - which students, which grades? How many buddy pairs would you start with? Who are the 'peer buddies'?",
+  "Define the 'what'. What do buddies actually DO together? Brainstorm 10 activities (lunches, events, prom...), then circle your top 3.",
+  "The benefits case. List the benefits for (a) the LIFE Skills students, (b) the volunteers, (c) the school. This becomes the heart of your pitch.",
+  "The logistics. What would it take to run? Faculty sponsor, meeting space, how you match buddies, a small fee for food/activities, permissions. List your open questions.",
+  "Scope it. Write a one-paragraph 'elevator pitch' for the club, and list who at school you'd need to talk to. Then draw a line: what's IN for year one, what's OUT."
+];
+const sharonLater = {
+  2:"Turn your Week 1 scope into a written proposal (problem, how it works, benefits, what you need from the school).",
+  3:"Build a short pitch: the one-pager or a few slides. Tighten the benefits into 3 clear points.",
+  4:"Line up a faculty sponsor and find the right administrator to pitch to. Send the ask.",
+  5:"Get feedback on the proposal from a parent/teacher; revise. Anticipate the questions admin will ask.",
+  6:"Rehearse the pitch out loud. Prepare answers to the top 5 likely objections.",
+  7:"Pitch to school administration. Take notes on what they say.",
+  8:"Follow up: capture next steps for a fall launch (sign-ups, first event, matching)."
+};
+function sharonForDay(w,d){
+  if(w===1) return {topic:"Scope & brainstorm", detail:sharonWk1[d-1], open:true};
+  return {topic:"Build & pitch", detail:(sharonLater[w]||"Keep moving the proposal forward."), open:false};
+}
+
+// ============ STATE ============
+const KEY="harry_summer_2026_v1";
+let mem={completed:{},choices:{}};
+const tutorState={}; // in-memory chat transcripts, keyed by cId
+function load(){ try{const s=localStorage.getItem(KEY); if(s) mem=JSON.parse(s);}catch(e){} }
+function save(){ try{localStorage.setItem(KEY, JSON.stringify(mem));}catch(e){} }
+function cId(w,d,t){return w+"-"+d+"-"+t;}
+function isDone(w,d,t){return !!mem.completed[cId(w,d,t)];}
+function toggle(w,d,t){mem.completed[cId(w,d,t)]=!isDone(w,d,t); save(); render();}
+function setChoice(w,d,val){mem.choices[cId(w,d,"responsibility")]=val; save(); render();}
+function getChoice(w,d){return mem.choices[cId(w,d,"responsibility")]||null;}
+function getProgress(w,d,kind){return (mem.progress&&mem.progress[cId(w,d,kind||"math")])||0;}
+function setProgress(w,d,a,b){var kind,k; if(b===undefined){kind="math";k=a;}else{kind=a;k=b;} if(!mem.progress)mem.progress={}; mem.progress[cId(w,d,kind)]=k; save();}
+function getNote(k){return (mem.notes&&mem.notes[k])||"";}
+function setNote(k,v){if(!mem.notes)mem.notes={}; mem.notes[k]=v; save();}
+function getChat(key){if(!mem.chats)mem.chats={}; if(!mem.chats[key])mem.chats[key]=[]; return mem.chats[key];}
+function dayComplete(w,d){return TRACKS.every(t=>isDone(w,d,t.key));}
+
+// ============ NAV ============
+function todayWD(){
+  const start=new Date(START_DATE+"T00:00:00"); const now=new Date();
+  let diff=Math.floor((now-start)/86400000);
+  if(diff<0) return {week:1,day:1,rest:false};
+  let week=Math.floor(diff/7)+1; let dow=((diff%7)+7)%7; // 0=Mon..6=Sun
+  if(week>8) return {week:8,day:6,rest:false};
+  if(dow===6) return {week:week,day:6,rest:true};
+  return {week:week,day:dow+1,rest:false};
+}
+let view = todayWD();
+function go(delta){
+  let idx=(view.week-1)*6+(view.day-1)+delta;
+  idx=Math.max(0,Math.min(47,idx));
+  view={week:Math.floor(idx/6)+1, day:(idx%6)+1, rest:false};
+  render();
+}
+
+// ============ RENDER ============
+function el(html){const d=document.createElement("div"); d.innerHTML=html.trim(); return d.firstChild;}
+function esc(s){return (s+"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function fmt(s){ let t=esc(s); t=t.replace(/```(?:[a-z0-9]*\n)?([\s\S]*?)```/gi,function(_,c){return "<pre class='code'>"+c.replace(/\n$/,"")+"</pre>";}); t=t.replace(/`([^`]+)`/g,"<code>$1</code>"); t=t.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>"); return t; }
+
+function render(){
+  const w=view.week, d=view.day;
+  document.getElementById("whereMain").textContent="Week "+w+" · Day "+d;
+  const c=coding[w];
+  document.getElementById("whereSub").innerHTML="This week: "+esc(c.title)+" <span class='pill "+c.type+"'>"+c.type.toUpperCase()+"</span>";
+
+  const cards=document.getElementById("cards");
+  cards.innerHTML="";
+  if(view.rest){
+    cards.appendChild(el("<div class='rest'><b>Rest day.</b><br>Six days on, one day off. Come back tomorrow.</div>"));
+  }
+
+  TRACKS.forEach(t=>{
+    const on=isDone(w,d,t.key);
+    let sub="", bodyHtml="";
+    if(t.key==="responsibility"){
+      const ch=getChoice(w,d);
+      sub=ch?("Today: "+ch):"Pick one";
+      bodyHtml="<p>Pick your chore for today and check it off. Aim for roughly 3 dish days to 1 dog day across the week.</p>"+
+        "<div class='choice'><button data-ch='Dishes' class='"+(ch==='Dishes'?'sel':'')+"'>Dishes</button>"+
+        "<button data-ch='Walk the dog' class='"+(ch==='Walk the dog'?'sel':'')+"'>Walk the dog</button></div>";
+    } else if(t.key==="reading"){
+      const r=readingForDay(w,d); const uid=w+"_"+d;
+      sub=r.book+" · "+r.pages;
+      bodyHtml="<p><b>"+esc(r.book)+"</b> &mdash; "+esc(r.pages)+"</p>"+
+        "<div class='prompt'><b>This week's journal prompt:</b><br>"+esc(r.prompt)+"</div>"+
+        "<div class='journal'>"+
+          "<label class='jlabel'>Today's journal<span class='savednote' id='jsaved_"+uid+"'></span></label>"+
+          "<textarea class='jarea' id='jday_"+uid+"' placeholder='2-4 sentences about the reading...'></textarea>"+
+          "<label class='jlabel'>Weekly prompt answer</label>"+
+          "<textarea class='jarea' id='jweek_"+uid+"' placeholder='Answer the weekly prompt in a short paragraph...'></textarea>"+
+        "</div>"+
+        "<details class='det'><summary>Past entries</summary><div class='past' id='jpast_"+uid+"'></div></details>";
+    } else if(t.key==="math"){
+      const m=mathForDay(w,d); const uid=w+"_"+d;
+      const _n=mathTutorCtx(w,d).problems.length; const _k=getProgress(w,d);
+      sub=m.topic + (_n>0 && _k>0 ? "  ·  "+_k+"/"+_n : "");
+      bodyHtml="<p><b>"+esc(m.topic)+"</b></p>"+
+        "<p style='font-size:13px;color:#6b7280'>"+esc(m.note)+" ~30 minutes.</p>"+
+        "<div class='tutor' id='tutor_"+uid+"'>"+
+          "<div class='hint'>Work through today with your tutor - it asks the questions, you answer. (Needs the site deployed.)</div>"+
+          "<div class='tprog' id='tprogwrap_"+uid+"' style='display:none'><div class='tprogbar'><div class='fill' id='tprogfill_"+uid+"'></div></div><span class='tproglbl' id='tproglbl_"+uid+"'></span></div>"+
+          "<div class='log' id='tlog_"+uid+"'></div>"+
+          "<div class='row'><input class='msgin' id='tin_"+uid+"' placeholder='Type your answer, or say hi to start...'><button class='send' id='tsend_"+uid+"'>Send</button></div>"+
+        "</div>"+
+        "<details class='det'><summary>Scratchpad - try a bit of code</summary>"+
+          "<div class='pad'><div class='bar'><select id='plang_"+uid+"'><option value='js'>JavaScript</option><option value='py'>Python</option></select>"+
+          "<button class='runbtn' id='prun_"+uid+"'>Run</button><span style='font-size:12px;color:#94a3b8'>output appears below</span></div>"+
+          "<textarea id='pcode_"+uid+"' placeholder='try something, e.g.  console.log(7 % 2)'></textarea>"+
+          "<div class='out' id='pout_"+uid+"'>(nothing yet)</div></div>"+
+        "</details>";
+    } else if(t.key==="sharon"){
+      const s=sharonForDay(w,d); const uid=w+"_"+d;
+      sub=s.topic;
+      bodyHtml="<p>"+esc(s.detail)+"</p>"+(s.open?"<p style='font-size:13px;color:#6b7280'>Week 1 is yours to explore - there are no wrong answers yet. You're designing how the club works.</p>":"")+
+        "<div class='journal'>"+
+          "<label class='jlabel'>Project notebook &middot; all your Sharon Buddies notes<span class='savednote' id='ssaved_"+uid+"'></span></label>"+
+          "<textarea class='jarea' id='snote_"+uid+"' style='min-height:140px' placeholder='Your running notes for the whole project - they stay here across every day, and your mentor can see them.'></textarea>"+
+        "</div>"+
+        "<div class='tutor' id='stutor_"+uid+"'>"+
+          "<div class='hint'>Talk it through with your project mentor - it helps you shape the club, not decide for you. (Needs the site deployed.)</div>"+
+          "<div class='log' id='stlog_"+uid+"'></div>"+
+          "<div class='row'><input class='msgin' id='stin_"+uid+"' placeholder='Think out loud, ask, or share an idea...'><button class='send' id='stsend_"+uid+"'>Send</button></div>"+
+        "</div>";
+    } else if(t.key==="coding"){
+      const done = c.type==="app"?doneApp:doneGame; const uid=w+"_"+d;
+      const _ck=getProgress(w,d,"coding");
+      sub=c.title + (_ck>0 ? "  ·  "+_ck+"/"+done.length+" shipped-checks" : "");
+      bodyHtml="<p style='font-size:13px;color:#6b7280'>"+esc(c.goal)+"</p>"+
+        (c.mini?("<div class='mini'><b>Mini-lesson:</b> "+esc(c.mini)+"</div>"):"")+
+        (c.type==="app"?("<div class='sblink'>Build it in <b>StackBlitz</b> (stackblitz.com) - a code editor that runs in your browser with a live preview, nothing to install.</div>"):"")+
+        "<p><b>Today (Day "+d+"):</b> "+esc(c.days[d-1])+"</p>"+
+        "<details class='det'><summary>This week's Definition of Done</summary>"+
+        "<ul class='done-list'>"+done.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul></details>"+
+        "<div class='linkrow'>"+
+          "<div class='lk'><label>Live / itch link</label><input id='clive_"+uid+"' placeholder='https://...'></div>"+
+          "<div class='lk'><label>GitHub repo</label><input id='crepo_"+uid+"' placeholder='https://github.com/...'></div>"+
+        "</div>"+
+        "<div class='tutor' id='ctutor_"+uid+"'>"+
+          "<div class='hint'>Stuck? Your coach can read your linked GitHub repo (your latest commit) - or paste code / a screenshot. It nudges you to the next step. (Needs the site deployed.)</div>"+
+          "<div class='tprog' id='ctprogwrap_"+uid+"' style='display:none'><div class='tprogbar'><div class='fill' id='ctprogfill_"+uid+"'></div></div><span class='tproglbl' id='ctproglbl_"+uid+"'></span></div>"+
+          "<div class='log' id='ctlog_"+uid+"'></div>"+
+          "<div class='imgprev' id='cimgprev_"+uid+"' style='display:none'></div>"+
+          "<div class='row'><button class='attach' id='catt_"+uid+"' title='Attach a screenshot'>Image</button><input class='msgin' id='ctin_"+uid+"' placeholder='Ask, paste code, or attach a screenshot...'><button class='send' id='ctsend_"+uid+"'>Send</button></div>"+
+          "<input type='file' accept='image/*' id='cfile_"+uid+"' style='display:none'>"+
+        "</div>"+
+        "<details class='det'><summary>Scratchpad - try a bit of code</summary>"+
+          "<div class='pad'><div class='bar'><select id='cplang_"+uid+"'><option value='js'>JavaScript</option><option value='py'>Python</option></select>"+
+          "<button class='runbtn' id='cprun_"+uid+"'>Run</button><span style='font-size:12px;color:#94a3b8'>output appears below</span></div>"+
+          "<textarea id='cpcode_"+uid+"' placeholder='try something, e.g.  console.log(2 + 2)'></textarea>"+
+          "<div class='out' id='cpout_"+uid+"'>(nothing yet)</div></div>"+
+        "</details>";
+    }
+    const card=el(
+      "<div class='card t-"+t.key+"'>"+
+        "<div class='head'>"+
+          "<div class='chk "+(on?"on":"")+"' data-toggle='"+t.key+"'></div>"+
+          "<div class='titles'><div class='k'>"+t.label+"</div><div class='v'>"+esc(sub)+"</div></div>"+
+          "<div class='caret'>&#9654;</div>"+
+        "</div>"+
+        "<div class='body'>"+bodyHtml+"</div>"+
+      "</div>");
+    card.querySelector(".head").addEventListener("click",(e)=>{
+      if(e.target.closest("[data-toggle]")) return;
+      card.classList.toggle("open");
+    });
+    card.querySelector("[data-toggle]").addEventListener("click",()=>toggle(w,d,t.key));
+    card.querySelectorAll("[data-ch]").forEach(b=>b.addEventListener("click",(e)=>{e.stopPropagation(); setChoice(w,d,b.getAttribute("data-ch"));}));
+
+    if(t.key==="math") wireMath(card,w,d);
+    if(t.key==="coding") wireCoding(card,w,d);
+    if(t.key==="reading") wireReading(card,w,d);
+    if(t.key==="sharon") wireSharon(card,w,d);
+    cards.appendChild(card);
+  });
+
+  const doneCount=TRACKS.filter(t=>isDone(w,d,t.key)).length;
+  document.getElementById("dayBar").style.width=(doneCount/TRACKS.length*100)+"%";
+  renderMap();
+  renderStreak();
+}
+
+// ============ MATH TUTOR + SCRATCHPAD WIRING ============
+function wireMath(card,w,d){
+  const uid=w+"_"+d; const key=cId(w,d,"math"); const ctx=mathTutorCtx(w,d);
+  const log=card.querySelector("#tlog_"+uid);
+  const input=card.querySelector("#tin_"+uid);
+  const sendBtn=card.querySelector("#tsend_"+uid);
+  if(!tutorState[key]) tutorState[key]=[];
+  let convo=tutorState[key];
+  const nProblems=ctx.problems.length;
+  const progWrap=card.querySelector("#tprogwrap_"+uid);
+  const progFill=card.querySelector("#tprogfill_"+uid);
+  const progLbl=card.querySelector("#tproglbl_"+uid);
+  function paintProgress(){
+    if(nProblems>0){ progWrap.style.display="flex"; const k=getProgress(w,d); progFill.style.width=Math.round(k/nProblems*100)+"%"; progLbl.textContent=k+" of "+nProblems+" done"; }
+  }
+  function paint(){
+    log.innerHTML=convo.map(m=>"<div class='msg "+(m.role==='assistant'?'bot':'me')+"'>"+fmt(m.content)+"</div>").join("");
+    log.scrollTop=log.scrollHeight;
+  }
+  paint(); paintProgress();
+  async function send(userText){
+    if(userText) convo.push({role:"user",content:userText});
+    paint();
+    const thinking=document.createElement("div"); thinking.className="msg bot"; thinking.textContent="…";
+    log.appendChild(thinking); log.scrollTop=log.scrollHeight;
+    try{
+      const r=await fetch("/api/tutor",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({topic:ctx.topic,problems:ctx.problems,pitfalls:ctx.pitfalls,messages:convo})});
+      const data=await r.json(); thinking.remove();
+      let reply=data.reply||("(tutor unavailable: "+(data.error||"unknown error")+")");
+      const pm=reply.match(/<progress>\s*(\d+)\s*<\/progress>/i);
+      if(pm){ let k=parseInt(pm[1],10); if(nProblems>0) k=Math.max(0,Math.min(nProblems,k)); setProgress(w,d,k); }
+      reply=reply.replace(/<progress>[\s\S]*?<\/progress>/gi,"").trim();
+      convo.push({role:"assistant",content:reply}); paint(); paintProgress();
+    }catch(e){
+      thinking.remove();
+      convo.push({role:"assistant",content:"(Could not reach the tutor. Once the site is deployed to Vercel this will work. Details: "+e.message+")"});
+      paint();
+    }
+  }
+  sendBtn.addEventListener("click",()=>{
+    const v=input.value.trim(); input.value="";
+    if(!v && convo.length>0) return; // don't spam
+    send(v);
+  });
+  input.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); sendBtn.click(); }});
+
+  const runBtn=card.querySelector("#prun_"+uid);
+  const lang=card.querySelector("#plang_"+uid);
+  const code=card.querySelector("#pcode_"+uid);
+  const out=card.querySelector("#pout_"+uid);
+  runBtn.addEventListener("click",()=>runCode(lang.value,code.value,out));
+}
+
+// ============ CODING COACH WIRING ============
+function wireCoding(card,w,d){
+  const uid=w+"_"+d; const key=cId(w,d,"codingchat"); const c=coding[w];
+  const dod = c.type==="app"?doneApp:doneGame; const nUnits=dod.length;
+  const liveEl=card.querySelector("#clive_"+uid), repoEl=card.querySelector("#crepo_"+uid);
+  if(liveEl){ liveEl.value=getNote("live-"+w); liveEl.addEventListener("input",function(){ setNote("live-"+w,liveEl.value); renderPortfolio(); }); }
+  if(repoEl){ repoEl.value=getNote("repo-"+w); repoEl.addEventListener("input",function(){ setNote("repo-"+w,repoEl.value); renderPortfolio(); }); }
+  const log=card.querySelector("#ctlog_"+uid);
+  const input=card.querySelector("#ctin_"+uid);
+  const sendBtn=card.querySelector("#ctsend_"+uid);
+  const progWrap=card.querySelector("#ctprogwrap_"+uid);
+  const progFill=card.querySelector("#ctprogfill_"+uid);
+  const progLbl=card.querySelector("#ctproglbl_"+uid);
+  if(!tutorState[key]) tutorState[key]=[];
+  let convo=tutorState[key];
+  function paintProgress(){ progWrap.style.display="flex"; const k=getProgress(w,d,"coding"); progFill.style.width=Math.round(k/nUnits*100)+"%"; progLbl.textContent=k+" of "+nUnits+" done"; }
+  function paint(){ log.innerHTML=convo.map(function(m){ var inner=fmt(m.content||""); if(m.image) inner+="<img class='shot' src='"+m.image+"'>"; return "<div class='msg "+(m.role==='assistant'?'bot':'me')+"'>"+inner+"</div>"; }).join(""); log.scrollTop=log.scrollHeight; }
+  paint(); paintProgress();
+  async function send(userText,image){
+    if(userText || image) convo.push({role:"user",content:userText||"",image:image||null});
+    paint();
+    const thinking=document.createElement("div"); thinking.className="msg bot"; thinking.textContent="…";
+    log.appendChild(thinking); log.scrollTop=log.scrollHeight;
+    try{
+      const r=await fetch("/api/tutor",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({mode:"coding",project:c.title,type:c.type,goal:c.goal,phase:c.days[d-1],dayNum:d,dod:dod,repo:getNote("repo-"+w),messages:convo})});
+      const data=await r.json(); thinking.remove();
+      let reply=data.reply||("(coach unavailable: "+(data.error||"unknown error")+")");
+      const pm=reply.match(/<progress>\s*(\d+)\s*<\/progress>/i);
+      if(pm){ let k=parseInt(pm[1],10); k=Math.max(0,Math.min(nUnits,k)); setProgress(w,d,"coding",k); }
+      reply=reply.replace(/<progress>[\s\S]*?<\/progress>/gi,"").trim();
+      convo.push({role:"assistant",content:reply}); paint(); paintProgress();
+    }catch(e){
+      thinking.remove();
+      convo.push({role:"assistant",content:"(Could not reach the coach. Once the site is deployed this will work. Details: "+e.message+")"});
+      paint();
+    }
+  }
+  let pendingImage=null;
+  const fileInput=card.querySelector("#cfile_"+uid);
+  const attBtn=card.querySelector("#catt_"+uid);
+  const imgprev=card.querySelector("#cimgprev_"+uid);
+  function setPending(dataUrl){ pendingImage=dataUrl||null; if(pendingImage){ imgprev.style.display="flex"; imgprev.innerHTML="<img src='"+pendingImage+"'><span style='font-size:12px;color:#6b7280'>screenshot attached</span><button class='rm' title='remove'>&times;</button>"; imgprev.querySelector(".rm").onclick=function(){ setPending(null); }; } else { imgprev.style.display="none"; imgprev.innerHTML=""; } }
+  attBtn.addEventListener("click",()=>fileInput.click());
+  fileInput.addEventListener("change",()=>{ const f=fileInput.files&&fileInput.files[0]; if(f) scaleImage(f,1400,setPending); fileInput.value=""; });
+  input.addEventListener("paste",(e)=>{ const items=e.clipboardData&&e.clipboardData.items; if(!items) return; for(let i=0;i<items.length;i++){ const it=items[i]; if(it.type&&it.type.indexOf("image")===0){ const f=it.getAsFile(); if(f){ e.preventDefault(); scaleImage(f,1400,setPending); } } } });
+  sendBtn.addEventListener("click",()=>{ const v=input.value.trim(); const img=pendingImage; input.value=""; if(!v && !img && convo.length>0) return; setPending(null); send(v,img); });
+  input.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); sendBtn.click(); }});
+  const runBtn=card.querySelector("#cprun_"+uid);
+  const lang=card.querySelector("#cplang_"+uid);
+  const code=card.querySelector("#cpcode_"+uid);
+  const out=card.querySelector("#cpout_"+uid);
+  runBtn.addEventListener("click",()=>runCode(lang.value,code.value,out));
+}
+
+// ============ READING JOURNAL WIRING ============
+function wireReading(card,w,d){
+  const uid=w+"_"+d;
+  const dayKey=cId(w,d,"journal"), weekKey="jw-"+w;
+  const dayEl=card.querySelector("#jday_"+uid), weekEl=card.querySelector("#jweek_"+uid), saved=card.querySelector("#jsaved_"+uid);
+  const past=card.querySelector("#jpast_"+uid);
+  dayEl.value=getNote(dayKey); weekEl.value=getNote(weekKey);
+  function refreshPast(){ if(past) past.innerHTML=buildReadingPast(w,d); }
+  refreshPast();
+  function flash(){ saved.textContent="saved"; clearTimeout(saved._t); saved._t=setTimeout(function(){ saved.textContent=""; },1200); }
+  dayEl.addEventListener("input",function(){ setNote(dayKey,dayEl.value); flash(); refreshPast(); });
+  weekEl.addEventListener("input",function(){ setNote(weekKey,weekEl.value); flash(); refreshPast(); });
+}
+function buildReadingPast(curW,curD){
+  let html="";
+  for(let w=1;w<=8;w++){
+    let weekHtml="";
+    for(let d=1;d<=6;d++){
+      if(w===curW && d===curD) continue;
+      const txt=getNote(cId(w,d,"journal"));
+      if(txt && txt.trim()) weekHtml+="<div class='pastitem'><div class='pastlbl'>Day "+d+"</div><div class='pasttxt'>"+esc(txt)+"</div></div>";
+    }
+    const wa=getNote("jw-"+w);
+    if(weekHtml || (wa && wa.trim())){
+      html+="<div class='pastweek'><div class='pastwk'>Week "+w+" &middot; "+esc(reading[w].book)+"</div>"+weekHtml;
+      if(wa && wa.trim()) html+="<div class='pastitem'><div class='pastlbl'>Weekly prompt</div><div class='pasttxt'>"+esc(wa)+"</div></div>";
+      html+="</div>";
+    }
+  }
+  return html || "<div style='font-size:13px;color:#94a3b8;padding:6px 0'>No other entries yet - past journal entries will show up here.</div>";
+}
+
+// ============ SHARON BUDDIES NOTES + MENTOR WIRING ============
+function wireSharon(card,w,d){
+  const uid=w+"_"+d; const s=sharonForDay(w,d);
+  const NB="sharon-notebook";
+  const nEl=card.querySelector("#snote_"+uid), nSaved=card.querySelector("#ssaved_"+uid);
+  nEl.value=getNote(NB);
+  function flash(){ nSaved.textContent="saved"; clearTimeout(nSaved._t); nSaved._t=setTimeout(function(){ nSaved.textContent=""; },1200); }
+  nEl.addEventListener("input",function(){ setNote(NB,nEl.value); flash(); });
+  const log=card.querySelector("#stlog_"+uid), input=card.querySelector("#stin_"+uid), sendBtn=card.querySelector("#stsend_"+uid);
+  let convo=getChat("sharon"); // one continuous, persisted thread
+  function paint(){ log.innerHTML=convo.map(function(m){ return "<div class='msg "+(m.role==='assistant'?'bot':'me')+"'>"+fmt(m.content||"")+"</div>"; }).join(""); log.scrollTop=log.scrollHeight; }
+  paint();
+  async function send(userText){
+    if(userText) convo.push({role:"user",content:userText});
+    save(); paint();
+    const thinking=document.createElement("div"); thinking.className="msg bot"; thinking.textContent="…"; log.appendChild(thinking); log.scrollTop=log.scrollHeight;
+    try{
+      const r=await fetch("/api/tutor",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({mode:"mentor",week:w,phase:s.topic,activity:s.detail,notebook:getNote(NB),messages:convo})});
+      const data=await r.json(); thinking.remove();
+      let reply=data.reply||("(mentor unavailable: "+(data.error||"unknown error")+")");
+      convo.push({role:"assistant",content:reply}); save(); paint();
+    }catch(e){ thinking.remove(); convo.push({role:"assistant",content:"(Could not reach the mentor. Once the site is deployed this will work. Details: "+e.message+")"}); save(); paint(); }
+  }
+  sendBtn.addEventListener("click",function(){ const v=input.value.trim(); input.value=""; if(!v && convo.length>0) return; send(v); });
+  input.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); sendBtn.click(); } });
+}
+
+// ============ IMAGE HELPER ============
+function scaleImage(file,maxDim,cb){
+  const img=new Image(); const url=URL.createObjectURL(file);
+  img.onload=function(){
+    let width=img.naturalWidth||img.width, height=img.naturalHeight||img.height;
+    const scale=Math.min(1, maxDim/Math.max(width,height));
+    const cw=Math.max(1,Math.round(width*scale)), ch=Math.max(1,Math.round(height*scale));
+    const cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+    cv.getContext("2d").drawImage(img,0,0,cw,ch);
+    URL.revokeObjectURL(url);
+    try{ cb(cv.toDataURL("image/jpeg",0.85)); }catch(e){ cb(null); }
+  };
+  img.onerror=function(){ URL.revokeObjectURL(url); cb(null); };
+  img.src=url;
+}
+
+// ============ CODE SCRATCHPAD ============
+let pyodideReady=null;
+function runCode(lang,src,outEl){
+  if(lang==="js"){
+    const logs=[];
+    let frame;
+    try{
+      frame=document.createElement("iframe"); frame.style.display="none"; document.body.appendChild(frame);
+      const w=frame.contentWindow;
+      w.console.log=(...a)=>logs.push(a.map(x=>typeof x==="object"?JSON.stringify(x):String(x)).join(" "));
+      let result;
+      try{ result=w.eval(src); }
+      catch(err){ logs.push("Error: "+err.message); }
+      if(result!==undefined && logs.length===0) logs.push(String(result));
+    }catch(e){ logs.push("Error: "+e.message); }
+    finally{ if(frame) document.body.removeChild(frame); }
+    outEl.textContent=logs.join("\n")||"(no output)";
+  } else {
+    runPython(src,outEl);
+  }
+}
+async function runPython(src,outEl){
+  try{
+    if(!pyodideReady){
+      outEl.textContent="loading Python (first time, a few seconds)...";
+      await new Promise((res,rej)=>{ const s=document.createElement("script");
+        s.src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"; s.onload=res; s.onerror=()=>rej(new Error("could not load Python runtime"));
+        document.head.appendChild(s); });
+      pyodideReady=await loadPyodide();
+    }
+    let buf="";
+    pyodideReady.setStdout({batched:(t)=>{ buf+=t+"\n"; }});
+    pyodideReady.setStderr({batched:(t)=>{ buf+=t+"\n"; }});
+    await pyodideReady.runPythonAsync(src);
+    outEl.textContent=buf||"(no output)";
+  }catch(e){ outEl.textContent="Error: "+((e&&e.message)||e); }
+}
+
+// ============ STREAK + MAP ============
+function renderStreak(){
+  const t=todayWD(); let streak=0;
+  let idx=(t.week-1)*6+(t.day-1);
+  for(let i=idx;i>=0;i--){ const w=Math.floor(i/6)+1, d=(i%6)+1; if(dayComplete(w,d)) streak++; else break; }
+  document.getElementById("streakNum").textContent=streak;
+}
+function renderMap(){
+  let html="<table class='map'><tr><th></th>";
+  for(let d=1;d<=6;d++) html+="<th>D"+d+"</th>";
+  html+="</tr>";
+  for(let w=1;w<=8;w++){
+    html+="<tr><td class='weeklabel'>Wk "+w+"</td>";
+    for(let d=1;d<=6;d++){
+      const n=TRACKS.filter(t=>isDone(w,d,t.key)).length;
+      const full=n===5; const frac=n/5;
+      let bg = n===0?"#eef2f7":(full?"#2E7D32":"rgba(46,125,50,"+(0.25+frac*0.5)+")");
+      const col=(w===view.week&&d===view.day)?"#C8102E":"var(--line)";
+      html+="<td><span class='cell' style='background:"+bg+";border-color:"+col+";color:"+(n>0?'#fff':'#94a3b8')+"' data-w='"+w+"' data-d='"+d+"'>"+(n>0?n:"")+"</span></td>";
+    }
+    html+="</tr>";
+  }
+  html+="</table>";
+  const m=document.getElementById("map"); m.innerHTML=html;
+  m.querySelectorAll(".cell").forEach(c=>c.addEventListener("click",()=>{view={week:+c.getAttribute("data-w"),day:+c.getAttribute("data-d"),rest:false}; render();}));
+}
+
+// ============ SETUP CHECKLIST + PORTFOLIO ============
+const setupItems=[
+  {id:"vscode", t:"VS Code ready", d:"You already use it - just confirm it opens."},
+  {id:"ext-preview", t:"Install a live-preview extension", d:"Live Preview or Live Server, so web pages render as you save."},
+  {id:"ext-lint", t:"Install Prettier + ESLint", d:"Auto-format and catch mistakes in JS / web code."},
+  {id:"git-vscode", t:"Sign in to GitHub inside VS Code", d:"Accounts menu (bottom-left) -> sign in, so you can commit and push from the Git panel."},
+  {id:"acct-github", t:"Create / confirm your GitHub account", d:"Where each project's code and your portfolio repos live."},
+  {id:"acct-itch", t:"Create an itch.io account", d:"Where game builds get published - drag and drop, no git needed."},
+  {id:"unreal", t:"Install Unreal Engine (before week 5)", d:"Not urgent - only needed for the Unreal game weeks."}
+];
+function renderSetup(){
+  const wrap=document.getElementById("setupWrap"); if(!wrap) return;
+  const open=!(mem.ui&&mem.ui.setupClosed);
+  const doneN=setupItems.filter(it=>isDone(0,0,"setup-"+it.id)).length;
+  let html="<div class='setup"+(open?" open":"")+"'>"+
+    "<div class='shead' id='shead'><div style='flex:1'><div class='k'>First: set up your tools</div>"+
+      "<div class='v'>Dev environment setup &middot; "+doneN+"/"+setupItems.length+" done</div></div><div class='caret'>&#9654;</div></div>"+
+    "<div class='sbody'>";
+  setupItems.forEach(it=>{ const on=isDone(0,0,"setup-"+it.id);
+    html+="<div class='setupitem'><div class='chk "+(on?"on":"")+"' data-setup='"+it.id+"'></div><div class='txt'>"+esc(it.t)+"<small>"+esc(it.d)+"</small></div></div>"; });
+  html+="</div></div>";
+  wrap.innerHTML=html;
+  wrap.querySelector("#shead").addEventListener("click",()=>{ if(!mem.ui)mem.ui={}; mem.ui.setupClosed=open; save(); renderSetup(); });
+  wrap.querySelectorAll("[data-setup]").forEach(c=>c.addEventListener("click",(e)=>{ e.stopPropagation(); toggle(0,0,"setup-"+c.getAttribute("data-setup")); renderSetup(); }));
+}
+function renderPortfolio(){
+  const el=document.getElementById("portfolio"); if(!el) return; let html="";
+  for(let w=1;w<=8;w++){ const c=coding[w]; const live=getNote("live-"+w), repo=getNote("repo-"+w);
+    html+="<div class='pfrow'><span class='wk'>Wk "+w+"</span><span class='nm'>"+esc(c.title)+" <span class='pill "+c.type+"' style='font-size:9px'>"+c.type.toUpperCase()+"</span></span>"+
+      (live?("<a href='"+esc(live)+"' target='_blank' rel='noopener'>Live</a>"):"<span class='none'>no link</span>")+
+      (repo?("<a href='"+esc(repo)+"' target='_blank' rel='noopener'>Repo</a>"):"<span class='none'>no repo</span>")+"</div>"; }
+  el.innerHTML=html;
+}
+
+document.getElementById("prev").addEventListener("click",()=>go(-1));
+document.getElementById("next").addEventListener("click",()=>go(1));
+document.getElementById("today").addEventListener("click",()=>{view=todayWD(); render();});
+
+load(); renderSetup(); render(); renderPortfolio();
+</script>
+</body>
+</html>
