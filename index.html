@@ -214,9 +214,20 @@ const mathTheme = {
   7:"Logic, decision tables & tracing", 8:"Coordinate geometry + capstone"
 };
 const mathWk1 = ["Order of operations","Whole-number division and remainder (/ and %)","Negatives, absolute value, comparisons","Variables and translating words","Boolean logic (AND, OR, NOT)","Review + predict the Java output"];
+let mathBankW={}; // weeks 2-8 problems, loaded from mathbank.json at startup
+const mathPitfallsW={
+  2:"Mixing up which side is the 1s place; forgetting A-F mean 10-15 in hex; confusing 2^n with 2*n.",
+  3:"Confusing < with <=; using AND where a range needs OR (or vice versa); forgetting De Morgan flips AND/OR when you negate.",
+  4:"Substituting in the wrong place; squaring vs doubling; forgetting a value banned from the domain (divide-by-zero).",
+  5:"Rounding when Java would truncate; 'percent of' vs 'percent off'; forgetting % cycles back to 0.",
+  6:"Off-by-one (fencepost) errors; counting i<n as n+1 runs; adding instead of multiplying for nested loops.",
+  7:"Losing track of the variable mid-trace; AND/OR mix-ups; missing that NOT(NOT A) = A.",
+  8:"Swapping x and y; forgetting to square both differences before the square root; averaging wrong for midpoints."
+};
 function mathForDay(w,d){
   if(w===1) return {topic:mathWk1[d-1], note:"Full problems + answer key are in your Week 1 Starter Pack - or work them with the tutor below."};
-  return {topic:mathTheme[w], note:"Today's set: Math Weeks 2-8 packet, Week "+w+" Day "+d+" (answer key at the end of that week)."};
+  const wk=mathBankW[w]&&mathBankW[w][d];
+  return {topic: wk?wk.topic:mathTheme[w], note: wk?"Work these with the tutor below, or see the Math Weeks 2-8 packet.":"Today's set: Math Weeks 2-8 packet, Week "+w+" Day "+d+"."};
 }
 const mathProblems = {
   1:["5 + 2 x 3","(5 + 2) x 3","20 - 4 x 3 + 2","2 + 3^2","(2 + 3)^2","48 / 8 / 2","10 - (6 - 2) x 2","3 x 4 - 2 x 5"],
@@ -235,8 +246,9 @@ const mathPitfalls = {
   6:"Forgetting that integer division truncates; unsure what % means; mixing up the two println outputs."
 };
 function mathTutorCtx(w,d){
-  const m=mathForDay(w,d);
-  return { topic:m.topic+(w===1?"":" (Week "+w+")"), problems:(w===1?mathProblems[d]:[]), pitfalls:(w===1?mathPitfalls[d]:"") };
+  if(w===1) return { topic:mathWk1[d-1], problems:mathProblems[d], pitfalls:mathPitfalls[d] };
+  const wk=mathBankW[w]&&mathBankW[w][d];
+  return { topic:(wk?wk.topic:mathTheme[w])+" (Week "+w+")", problems:(wk?wk.problems:[]), pitfalls:(mathPitfallsW[w]||"") };
 }
 
 // ============ CONTENT: CODING ============
@@ -309,7 +321,13 @@ const KEY="harry_summer_2026_v1";
 let mem={completed:{},choices:{}};
 const tutorState={}; // in-memory chat transcripts, keyed by cId
 function load(){ try{const s=localStorage.getItem(KEY); if(s) mem=JSON.parse(s);}catch(e){} }
-function save(){ try{localStorage.setItem(KEY, JSON.stringify(mem));}catch(e){} }
+function save(){ try{ if(!_applyingRemote) mem.updatedAt=Date.now(); localStorage.setItem(KEY, JSON.stringify(mem)); }catch(e){} if(!_applyingRemote) scheduleSync(); }
+// ---- cross-device sync (optional; no-op until /api/state is configured) ----
+const SYNC_ID="harry-2026-sww";
+let _syncT=null, _applyingRemote=false;
+function scheduleSync(){ if(_applyingRemote) return; clearTimeout(_syncT); _syncT=setTimeout(pushState,1500); }
+async function pushState(){ try{ await fetch("/api/state",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({key:SYNC_ID,data:mem})}); }catch(e){} }
+async function pullState(){ try{ const r=await fetch("/api/state?key="+encodeURIComponent(SYNC_ID)); if(!r.ok) return; const j=await r.json(); const remote=j&&j.data; if(remote && (remote.updatedAt||0)>(mem.updatedAt||0)){ _applyingRemote=true; mem=remote; try{localStorage.setItem(KEY,JSON.stringify(mem));}catch(e){} _applyingRemote=false; renderSetup(); render(); renderPortfolio(); } else if(!remote){ pushState(); } }catch(e){} }
 function cId(w,d,t){return w+"-"+d+"-"+t;}
 function isDone(w,d,t){return !!mem.completed[cId(w,d,t)];}
 function toggle(w,d,t){mem.completed[cId(w,d,t)]=!isDone(w,d,t); save(); render();}
@@ -794,6 +812,10 @@ document.getElementById("next").addEventListener("click",()=>go(1));
 document.getElementById("today").addEventListener("click",()=>{view=todayWD(); render();});
 
 load(); renderSetup(); render(); renderPortfolio();
+fetch("mathbank.json").then(r=>r.json()).then(d=>{ mathBankW=d; render(); }).catch(()=>{});
+pullState();
+setInterval(pullState, 20000);
+window.addEventListener("focus", pullState);
 setInterval(function(){ _ttick++; document.querySelectorAll(".timerbox").forEach(updateTimerBox); if(_ttick%5===0){ for(const k in activeTimers) setTimer(k,currentSeconds(k)); } },1000);
 window.addEventListener("beforeunload",function(){ for(const k in activeTimers) pauseTimer(k); });
 </script>

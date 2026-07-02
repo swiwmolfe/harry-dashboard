@@ -18,6 +18,24 @@ serverless function (`api/tutor.js`) that talks to the Claude API for the math t
    - `GITHUB_TOKEN` = a read-only GitHub token  (optional). The coach reads Harry's **public** repos with no token; adding one raises the GitHub API rate limit from 60/hr to 5000/hr. A fine-grained token with public read access is plenty.
 4. Deploy. Open the URL. On the **Math** card, "Work through today with your tutor" now runs.
 
+## Cross-device sync (optional)
+
+Progress, journal, notes, timers, and the Sharon chat live in the browser by default.
+To sync them across devices, add a small Redis store and two env vars:
+
+1. In Vercel, open the **Storage / Marketplace** tab and add **Upstash for Redis** (free tier is
+   plenty). Connecting it to the project auto-adds the env vars it needs.
+2. Confirm these exist in **Settings -> Environment Variables** (the integration sets one pair or
+   the other; the code reads either):
+   - `UPSTASH_REDIS_REST_URL` / `KV_REST_API_URL`
+   - `UPSTASH_REDIS_REST_TOKEN` / `KV_REST_API_TOKEN`
+3. Redeploy.
+
+That's it - the dashboard then pulls on load / focus and pushes changes (last-write-wins). Until
+these vars exist, `/api/state` returns "not configured" and the app just uses local storage, so
+nothing breaks. The sync key is `SYNC_ID` near the top of `index.html`; change it to something
+private if you like.
+
 ## Notes
 - The tutor only works once deployed (or on `vercel dev` locally). Opening `index.html`
   straight from disk will show the dashboard, but the tutor call will fail gracefully
