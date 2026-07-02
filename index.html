@@ -120,6 +120,17 @@
   .pastitem{border-left:3px solid var(--line);padding:2px 0 2px 10px;margin:4px 0}
   .pastlbl{font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
   .pasttxt{font-size:13px;color:#475569;white-space:pre-wrap}
+  .timerbox{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;background:#fbfdff}
+  .tmrreadout{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;font-weight:700;color:var(--navy)}
+  .tmrreadout .tmrgoal{color:#94a3b8;font-weight:600;font-size:13px}
+  .timerbox.reached .tmrreadout{color:var(--green)}
+  .tmrbar{height:6px;background:#e5e9f0;border-radius:4px;overflow:hidden;margin:6px 0 8px}
+  .tmrbar .fill{height:100%;width:0;background:var(--code);transition:width .4s}
+  .timerbox.reached .tmrbar .fill{background:var(--green)}
+  .tmrbtns{display:flex;gap:6px}
+  .tmrbtns button{border:1px solid var(--line);background:#fff;border-radius:7px;padding:5px 12px;cursor:pointer;font-size:13px}
+  .tmrbtns button:hover{background:#f0f4f8}
+  .timerbox.running .tmrbtns button[data-act='start']{background:var(--green);color:#fff;border-color:var(--green)}
   details.det > summary{cursor:pointer;color:var(--navy);font-size:13px;margin-top:8px}
   .pad{margin-top:8px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .pad .bar{display:flex;gap:6px;align-items:center;padding:6px 8px;background:#f5f7fa;border-bottom:1px solid var(--line)}
@@ -389,6 +400,7 @@ function render(){
       const s=sharonForDay(w,d); const uid=w+"_"+d;
       sub=s.topic;
       bodyHtml="<p>"+esc(s.detail)+"</p>"+(s.open?"<p style='font-size:13px;color:#6b7280'>Week 1 is yours to explore - there are no wrong answers yet. You're designing how the club works.</p>":"")+
+        timerHtml(cId(w,d,"sharon-timer"),1800)+
         "<div class='journal'>"+
           "<label class='jlabel'>Project notebook &middot; all your Sharon Buddies notes<span class='savednote' id='ssaved_"+uid+"'></span></label>"+
           "<textarea class='jarea' id='snote_"+uid+"' style='min-height:140px' placeholder='Your running notes for the whole project - they stay here across every day, and your mentor can see them.'></textarea>"+
@@ -403,6 +415,7 @@ function render(){
       const _ck=getProgress(w,d,"coding");
       sub=c.title + (_ck>0 ? "  ·  "+_ck+"/"+done.length+" shipped-checks" : "");
       bodyHtml="<p style='font-size:13px;color:#6b7280'>"+esc(c.goal)+"</p>"+
+        timerHtml(cId(w,d,"coding-timer"),3600)+
         (c.mini?("<div class='mini'><b>Mini-lesson:</b> "+esc(c.mini)+"</div>"):"")+
         (c.type==="app"?("<div class='sblink'>Build it in <b>StackBlitz</b> (stackblitz.com) - a code editor that runs in your browser with a live preview, nothing to install.</div>"):"")+
         "<p><b>Today (Day "+d+"):</b> "+esc(c.days[d-1])+"</p>"+
@@ -447,6 +460,7 @@ function render(){
     if(t.key==="coding") wireCoding(card,w,d);
     if(t.key==="reading") wireReading(card,w,d);
     if(t.key==="sharon") wireSharon(card,w,d);
+    if(t.key==="sharon"||t.key==="coding") wireTimer(card);
     cards.appendChild(card);
   });
 
@@ -740,11 +754,48 @@ function renderPortfolio(){
   el.innerHTML=html;
 }
 
+// ============ WORK TIMERS (Sharon 30m, Coding 60m) ============
+const activeTimers={}; let _ttick=0;
+function getTimer(key){ return (mem.timers&&mem.timers[key])||0; }
+function setTimer(key,sec){ if(!mem.timers)mem.timers={}; mem.timers[key]=sec; save(); }
+function currentSeconds(key){ const a=activeTimers[key]; return a ? a.base+(Date.now()-a.start)/1000 : getTimer(key); }
+function startTimer(key){ if(activeTimers[key]) return; activeTimers[key]={base:getTimer(key),start:Date.now()}; }
+function pauseTimer(key){ const a=activeTimers[key]; if(!a) return; setTimer(key,a.base+(Date.now()-a.start)/1000); delete activeTimers[key]; }
+function resetTimer(key){ delete activeTimers[key]; setTimer(key,0); }
+function fmtTime(s){ s=Math.max(0,Math.floor(s)); const m=Math.floor(s/60), ss=s%60; return (m<10?"0":"")+m+":"+(ss<10?"0":"")+ss; }
+function timerHtml(key,goal){
+  return "<div class='timerbox' data-key='"+key+"' data-goal='"+goal+"'>"+
+    "<div class='tmrreadout'><span class='tmrtime'>00:00</span> <span class='tmrgoal'>/ "+fmtTime(goal)+" goal</span></div>"+
+    "<div class='tmrbar'><div class='fill'></div></div>"+
+    "<div class='tmrbtns'><button data-act='start'>Start</button><button data-act='pause'>Pause</button><button data-act='reset'>Reset</button></div>"+
+  "</div>";
+}
+function updateTimerBox(box){
+  const key=box.getAttribute("data-key"), goal=+box.getAttribute("data-goal");
+  const sec=currentSeconds(key);
+  const t=box.querySelector(".tmrtime"); if(t) t.textContent=fmtTime(sec);
+  const f=box.querySelector(".tmrbar .fill"); if(f) f.style.width=Math.min(100,sec/goal*100)+"%";
+  box.classList.toggle("reached",sec>=goal);
+  box.classList.toggle("running",!!activeTimers[key]);
+}
+function wireTimer(card){
+  const box=card.querySelector(".timerbox"); if(!box) return;
+  const key=box.getAttribute("data-key");
+  box.querySelectorAll("[data-act]").forEach(function(b){ b.addEventListener("click",function(){
+    const act=b.getAttribute("data-act");
+    if(act==="start") startTimer(key); else if(act==="pause") pauseTimer(key); else if(act==="reset") resetTimer(key);
+    updateTimerBox(box);
+  }); });
+  updateTimerBox(box);
+}
+
 document.getElementById("prev").addEventListener("click",()=>go(-1));
 document.getElementById("next").addEventListener("click",()=>go(1));
 document.getElementById("today").addEventListener("click",()=>{view=todayWD(); render();});
 
 load(); renderSetup(); render(); renderPortfolio();
+setInterval(function(){ _ttick++; document.querySelectorAll(".timerbox").forEach(updateTimerBox); if(_ttick%5===0){ for(const k in activeTimers) setTimer(k,currentSeconds(k)); } },1000);
+window.addEventListener("beforeunload",function(){ for(const k in activeTimers) pauseTimer(k); });
 </script>
 </body>
 </html>
