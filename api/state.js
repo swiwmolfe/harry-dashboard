@@ -8,8 +8,17 @@
 //   UPSTASH_REDIS_REST_TOKEN / KV_REST_API_TOKEN
 // If they're missing, sync is simply disabled (the app keeps working from local storage).
 
-const URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+// Find the REST URL/token no matter what prefix the Vercel/Upstash integration used
+// (e.g. KV_REST_API_URL, UPSTASH_REDIS_REST_URL, or harry26_KV_REST_API_URL).
+function pickEnv(suffix) {
+  if (process.env[suffix]) return process.env[suffix];
+  for (const k in process.env) {
+    if (k.endsWith(suffix) && !k.includes("READ_ONLY") && process.env[k]) return process.env[k];
+  }
+  return undefined;
+}
+const URL = pickEnv("UPSTASH_REDIS_REST_URL") || pickEnv("KV_REST_API_URL");
+const TOKEN = pickEnv("UPSTASH_REDIS_REST_TOKEN") || pickEnv("KV_REST_API_TOKEN");
 
 async function redis(cmd) {
   const r = await fetch(URL, {
