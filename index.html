@@ -514,9 +514,8 @@ function wireMath(card,w,d){
     const thinking=document.createElement("div"); thinking.className="msg bot"; thinking.textContent="…";
     log.appendChild(thinking); log.scrollTop=log.scrollHeight;
     try{
-      const r=await fetch("/api/tutor",{method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({topic:ctx.topic,problems:ctx.problems,pitfalls:ctx.pitfalls,messages:convo})});
-      const data=await r.json(); thinking.remove();
+      const data=await callTutor({topic:ctx.topic,problems:ctx.problems,pitfalls:ctx.pitfalls,messages:convo});
+      thinking.remove();
       let reply=data.reply||("(tutor unavailable: "+(data.error||"unknown error")+")");
       const pm=reply.match(/<progress>\s*(\d+)\s*<\/progress>/i);
       if(pm){ let k=parseInt(pm[1],10); if(nProblems>0) k=Math.max(0,Math.min(nProblems,k)); setProgress(w,d,k); }
@@ -566,9 +565,8 @@ function wireCoding(card,w,d){
     const thinking=document.createElement("div"); thinking.className="msg bot"; thinking.textContent="…";
     log.appendChild(thinking); log.scrollTop=log.scrollHeight;
     try{
-      const r=await fetch("/api/tutor",{method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({mode:"coding",project:c.title,type:c.type,goal:c.goal,phase:c.days[d-1],dayNum:d,dod:dod,repo:getNote("repo-"+w),messages:convo})});
-      const data=await r.json(); thinking.remove();
+      const data=await callTutor({mode:"coding",project:c.title,type:c.type,goal:c.goal,phase:c.days[d-1],dayNum:d,dod:dod,repo:getNote("repo-"+w),messages:convo});
+      thinking.remove();
       let reply=data.reply||("(coach unavailable: "+(data.error||"unknown error")+")");
       const pm=reply.match(/<progress>\s*(\d+)\s*<\/progress>/i);
       if(pm){ let k=parseInt(pm[1],10); k=Math.max(0,Math.min(nUnits,k)); setProgress(w,d,"coding",k); }
@@ -646,15 +644,45 @@ function wireSharon(card,w,d){
     save(); paint();
     const thinking=document.createElement("div"); thinking.className="msg bot"; thinking.textContent="…"; log.appendChild(thinking); log.scrollTop=log.scrollHeight;
     try{
-      const r=await fetch("/api/tutor",{method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({mode:"mentor",week:w,phase:s.topic,activity:s.detail,notebook:getNote(NB),messages:convo})});
-      const data=await r.json(); thinking.remove();
+      const data=await callTutor({mode:"mentor",week:w,phase:s.topic,activity:s.detail,notebook:getNote(NB),messages:convo});
+      thinking.remove();
       let reply=data.reply||("(mentor unavailable: "+(data.error||"unknown error")+")");
       convo.push({role:"assistant",content:reply}); save(); paint();
     }catch(e){ thinking.remove(); convo.push({role:"assistant",content:"(Could not reach the mentor. Once the site is deployed this will work. Details: "+e.message+")"}); save(); paint(); }
   }
   sendBtn.addEventListener("click",function(){ const v=input.value.trim(); input.value=""; if(!v && convo.length>0) return; send(v); });
   input.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); sendBtn.click(); } });
+}
+
+// ============ TUTOR API HELPER ============
+// Keeps requests small and robust: only the 2 most recent screenshots are
+// actually sent (older ones stay in the on-screen history but are dropped from
+// the payload so the body never blows past Vercel's ~4.5MB limit), and any
+// non-JSON / oversized / empty response is turned into a friendly message
+// instead of wedging the chat.
+function trimImagesForSend(messages,keep){
+  keep=(keep==null?2:keep); var budget=keep;
+  var out=(messages||[]).map(function(m){ return Object.assign({},m); });
+  for(var i=out.length-1;i>=0;i--){
+    if(out[i].image){ if(budget>0){ budget--; } else { out[i].image=null; } }
+  }
+  return out;
+}
+async function callTutor(payload){
+  payload=Object.assign({},payload);
+  if(payload.messages) payload.messages=trimImagesForSend(payload.messages,2);
+  var r;
+  try{ r=await fetch("/api/tutor",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)}); }
+  catch(e){ return {error:"couldn't reach the server ("+e.message+")"}; }
+  var text=""; try{ text=await r.text(); }catch(e){}
+  var data=null; try{ data=JSON.parse(text); }catch(e){}
+  if(!data){
+    if(r.status===413) return {error:"that message was too big to send - clear the chat (or send fewer/smaller screenshots) and try again"};
+    return {error:"server error "+r.status+(text?": "+text.slice(0,120):"")};
+  }
+  if(data.reply && String(data.reply).trim()) return {reply:data.reply};
+  if(data.error) return {error:data.error};
+  return {error:"got an empty reply - try rephrasing, or resend without the screenshot"};
 }
 
 // ============ IMAGE HELPER ============
