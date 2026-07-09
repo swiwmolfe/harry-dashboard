@@ -43,7 +43,7 @@ How you coach:
 - When he finishes today's phase, say so clearly and tell him what tomorrow's phase is.
 - Keep replies short. Plain text; you MAY use short fenced code blocks with triple backticks, but no headers or LaTeX.
 
-You'll be given the PROJECT, TODAY'S PHASE, and the DEFINITION OF DONE (what "shipped" means this week). If HARRY'S REPO is included, it holds his latest committed code plus the diff of his most recent commit - debug against that real code and point to specific files and lines; if you need a file that isn't shown, ask him to commit and push it (or paste it). On your first message, greet Harry in one line, restate today's phase in a sentence, and ask what he's got so far.
+You'll be given the PROJECT, TODAY'S PHASE, and the DEFINITION OF DONE (what "shipped" means this week). If HARRY'S REPO is included, it holds a full list of every file in his repo, the contents of his most relevant source files, and the diff of his most recent commit - debug against that real code and point to specific files and lines. The full file list shows you his whole project structure; if a file you need appears in that list but its contents weren't included, ask him to paste it. On your first message, greet Harry in one line, restate today's phase in a sentence, and ask what he's got so far.
 
 PROGRESS TRACKING: At the very end of EVERY reply, on its own final line, output a hidden marker in exactly this format: <progress>K</progress>, where K is how many of the DEFINITION OF DONE items are now fully satisfied (an integer from 0 up to the total). The app strips this line before showing your message - never mention it and never put anything after it.`;
 
@@ -75,6 +75,11 @@ async function ghFetch(path) {
   if (!r.ok) throw new Error("GitHub API " + r.status);
   return r.json();
 }
+// Which files are worth reading as source code, and which paths are build/IDE noise to skip.
+const CODE_EXT = /\.(cs|js|jsx|ts|tsx|py|java|kt|cpp|cc|cxx|c|h|hpp|hlsl|shader|compute|glsl|gd|lua|rb|go|rs|php|swift|html|css|scss|json|md|txt|yml|yaml)$/i;
+const SKIP_PATH = /(^|\/)(node_modules|Library|Temp|Obj|obj|Build|Builds|bin|\.git|\.vs|\.idea|Logs|UserSettings)\//i;
+const SKIP_FILE = /(\.meta|\.asset|\.prefab|\.unity|\.min\.js|\.lock|package-lock\.json)$/i;
+
 async function fetchRepoContext(repoUrl) {
   const pr = parseRepo(repoUrl);
   if (!pr) return "";
@@ -82,26 +87,58 @@ async function fetchRepoContext(repoUrl) {
   if (!Array.isArray(commits) || !commits.length) return `\n\nHARRY'S REPO (${pr.owner}/${pr.repo}): no commits yet.`;
   const sha = commits[0].sha;
   const msg = (commits[0].commit && commits[0].commit.message) || "";
-  const commit = await ghFetch(`/repos/${pr.owner}/${pr.repo}/commits/${sha}`);
-  const files = (commit.files || []).slice(0, 8);
+
+  // Recent changes: the latest commit's diff (what he's actively working on).
   let diff = "";
-  files.forEach(f => {
-    diff += `\n* ${f.filename} (${f.status}, +${f.additions || 0}/-${f.deletions || 0})`;
-    if (f.patch) diff += "\n" + f.patch.slice(0, 1400);
+  const changedNames = new Set();
+  try {
+    const commit = await ghFetch(`/repos/${pr.owner}/${pr.repo}/commits/${sha}`);
+    (commit.files || []).slice(0, 8).forEach(f => {
+      if (f.status !== "removed") changedNames.add(f.filename);
+      diff += `\n* ${f.filename} (${f.status}, +${f.additions || 0}/-${f.deletions || 0})`;
+      if (f.patch) diff += "\n" + f.patch.slice(0, 1200);
+    });
+  } catch (e) { /* diff is optional */ }
+
+  // Whole repo tree (one call), so the coach sees the full structure.
+  let tree = [];
+  try {
+    const t = await ghFetch(`/repos/${pr.owner}/${pr.repo}/git/trees/${sha}?recursive=1`);
+    tree = (t && t.tree) || [];
+  } catch (e) { /* fall back to changed-files-only below */ }
+
+  // Choose source files to actually read: real code, not too big; prefer files
+  // touched in the latest commit, then smallest-first to fit more in the budget.
+  const blobs = tree.filter(n => n.type === "blob" && CODE_EXT.test(n.path) && !SKIP_PATH.test(n.path) && !SKIP_FILE.test(n.path) && (n.size || 0) <= 60000);
+  blobs.sort((a, b) => {
+    const ca = changedNames.has(a.path) ? 0 : 1, cb = changedNames.has(b.path) ? 0 : 1;
+    if (ca !== cb) return ca - cb;
+    return (a.size || 0) - (b.size || 0);
   });
-  let contents = "";
-  const toFetch = files.filter(f => f.status !== "removed").slice(0, 4);
-  for (const f of toFetch) {
+
+  const MAX_FILES = 14, MAX_PER_FILE = 4000, MAX_TOTAL = 42000;
+  let contents = "", used = 0, shown = 0;
+  for (const b of blobs) {
+    if (shown >= MAX_FILES || used >= MAX_TOTAL) break;
     try {
-      const path = f.filename.split("/").map(encodeURIComponent).join("/");
+      const path = b.path.split("/").map(encodeURIComponent).join("/");
       const c = await ghFetch(`/repos/${pr.owner}/${pr.repo}/contents/${path}?ref=${sha}`);
       if (c && c.content) {
-        const txt = Buffer.from(c.content, c.encoding || "base64").toString("utf8").slice(0, 4000);
-        contents += `\n\n--- ${f.filename} (current) ---\n${txt}`;
+        const txt = Buffer.from(c.content, c.encoding || "base64").toString("utf8").slice(0, MAX_PER_FILE);
+        const tag = changedNames.has(b.path) ? " (current, changed in latest commit)" : " (current)";
+        contents += `\n\n--- ${b.path}${tag} ---\n${txt}`;
+        used += txt.length; shown++;
       }
     } catch (e) { /* skip unreadable file */ }
   }
-  return `\n\nHARRY'S REPO (${pr.owner}/${pr.repo})\nLatest commit: ${String(msg).slice(0, 200)}\nChanged files & diff:${diff}${contents}`;
+
+  // Full listing of every file (paths only), so he can ask about anything by name.
+  const allPaths = tree.filter(n => n.type === "blob").map(n => n.path);
+  const listing = allPaths.slice(0, 300).join("\n");
+  const treeNote = listing ? `\n\nFULL FILE LIST (${allPaths.length} files):\n${listing}` : "";
+  const shownNote = shown ? `\n\n(The ${shown} most relevant source files are included in full below. If you need a file that's in the list but not shown, ask Harry to paste it.)` : "";
+
+  return `\n\nHARRY'S REPO (${pr.owner}/${pr.repo})\nLatest commit: ${String(msg).slice(0, 200)}\nRecent changes (latest commit diff):${diff}${treeNote}${shownNote}${contents}`;
 }
 
 module.exports = async (req, res) => {
