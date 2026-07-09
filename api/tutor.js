@@ -8,7 +8,11 @@
 //   TUTOR_MODEL        -> exact model id (defaults to claude-sonnet-5)
 
 const MODEL = process.env.TUTOR_MODEL || "claude-sonnet-5";
-const MAX_TOKENS = 900;
+// Output budget. Was 900, which the coding coach exhausted while reasoning over
+// repo code, yielding an empty reply ("coach unavailable: unknown error").
+// Coding needs the most room (code analysis); math/mentor replies stay short
+// on their own because the system prompts tell them to.
+const MAX_TOKENS = 3000;
 
 const MATH_SYSTEM = `You are Harry's friendly summer tutor. Harry is 14 and getting ready for AP Computer Science A (Java) this fall.
 
@@ -179,6 +183,15 @@ module.exports = async (req, res) => {
     }
     const data = await r.json();
     const reply = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+    if (!reply) {
+      // No visible text came back (e.g. the model hit the token cap while
+      // reasoning). Tell the client instead of returning a blank message.
+      const why = data.stop_reason === "max_tokens"
+        ? "the reply got cut off before any text - try a shorter question or ask about one file at a time"
+        : "the model returned an empty reply - try rephrasing";
+      res.status(200).json({ error: why });
+      return;
+    }
     res.status(200).json({ reply });
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });
