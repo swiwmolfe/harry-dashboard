@@ -302,18 +302,72 @@ const sharonWk1 = [
   "The logistics. What would it take to run? Faculty sponsor, meeting space, how you match buddies, a small fee for food/activities, permissions. List your open questions.",
   "Scope it. Write a one-paragraph 'elevator pitch' for the club, and list who at school you'd need to talk to. Then draw a line: what's IN for year one, what's OUT."
 ];
-const sharonLater = {
-  2:"Turn your Week 1 scope into a written proposal (problem, how it works, benefits, what you need from the school).",
-  3:"Build a short pitch: the one-pager or a few slides. Tighten the benefits into 3 clear points.",
-  4:"Line up a faculty sponsor and find the right administrator to pitch to. Send the ask.",
-  5:"Get feedback on the proposal from a parent/teacher; revise. Anticipate the questions admin will ask.",
-  6:"Rehearse the pitch out loud. Prepare answers to the top 5 likely objections.",
-  7:"Pitch to school administration. Take notes on what they say.",
-  8:"Follow up: capture next steps for a fall launch (sign-ups, first event, matching)."
+const sharonThemes = {
+  2:"Write the proposal", 3:"Build the pitch", 4:"Line up your allies",
+  5:"Pressure-test it", 6:"Rehearse", 7:"Pitch", 8:"Set up the fall launch"
+};
+const sharonWk = {
+  2:[
+    "Problem first. Write the problem your club solves: who the LIFE Skills students are, why inclusion matters, and one real moment that shows it. This opens your proposal.",
+    "How it works. Write the 'how': buddy pairs, how often you meet, and the top 3 activities you circled in Week 1.",
+    "The benefits. Tighten your Week 1 benefits into three clear points - one each for the students, the volunteers, and the school.",
+    "The ask. Write exactly what you need from the school: a faculty sponsor, a meeting space, a small budget, and permission forms.",
+    "Timeline and proof. Add a first-year timeline and how you'll know it worked (pairs matched, events held, students who felt included).",
+    "Assemble it. Pull the pieces into one clean 1-2 page proposal. That's your Week 2 ship."
+  ],
+  3:[
+    "Find the headline. Boil the whole proposal down to three sentences someone would remember. These are your main messages.",
+    "Outline the pitch. Sketch a one-pager or slide order: problem, how it works, benefits, the ask.",
+    "Build it. Make the slides or the one-pager - keep it clean, few words, big ideas.",
+    "Make it real. Add one photo, quote, or number that makes a busy adult care. Show, don't just tell.",
+    "Two lengths. Write a 60-second version and a 3-minute version of your pitch.",
+    "Ship the pitch. Finish a deck or one-pager you'd be proud to hand to a principal. That's your Week 3 ship."
+  ],
+  4:[
+    "List your sponsors. Name every adult who might sponsor the club - the LIFE Skills teacher, a favorite teacher, a counselor.",
+    "Map the yes. Figure out who actually approves a new club at your school - principal, activities director, or a committee?",
+    "Write the ask. Draft a short, warm email asking a teacher to be your faculty sponsor.",
+    "Send it. Send the sponsor email and log who you contacted and when in your notebook.",
+    "Request the meeting. Draft the note asking the decision-maker for 15 minutes to hear your pitch.",
+    "Ship: allies lined up. Sponsor asked and a meeting requested, all tracked. That's your Week 4 ship."
+  ],
+  5:[
+    "Get a read. Share your proposal with a parent or teacher and ask what they honestly think.",
+    "Collect the doubts. Write down every question or worry they raised - don't defend, just capture.",
+    "Fix the weak spots. Revise the parts that confused them or felt thin.",
+    "Think like admin. List the tough questions a principal will ask: cost, supervision, liability, space.",
+    "Answer them. Write a clear answer to each of those questions.",
+    "Ship: a stronger proposal. A revised proposal plus a Q&A cheat sheet. That's your Week 5 ship."
+  ],
+  6:[
+    "Say it out loud. Practice your pitch standing up and timed. Notice where you stumble.",
+    "Watch yourself. Record it on your phone, watch it back, and pick two things to fix.",
+    "Prep objections. Write the top 5 pushbacks you might get and a calm response to each.",
+    "Mock pitch. Give the pitch to a family member and ask for one thing to improve.",
+    "Final polish. Tighten your slides and talking points based on the practice.",
+    "Ship: pitch-ready. A rehearsed, confident pitch you could give tomorrow. That's your Week 6 ship."
+  ],
+  7:[
+    "Confirm and prep. Confirm the meeting and get your materials printed or loaded.",
+    "Final run-through. Do one calm practice pass the day of.",
+    "Give the pitch. Deliver it. Breathe - you've prepared for this.",
+    "Capture it. Right after, write down every question they asked and anything you promised to follow up on.",
+    "Follow up. Send a thank-you and any information they requested.",
+    "Ship: pitch delivered. The pitch is given and the next step is in writing. That's your Week 7 ship."
+  ],
+  8:[
+    "Plan the fall. Turn the outcome into a concrete plan for the fall - or a plan to pitch again if you got a 'not yet'.",
+    "Build sign-ups. Draft the member interest / sign-up form for peer buddies.",
+    "Plan the first event. Decide the first activity and how you'll match buddies into pairs.",
+    "Write your playbook. Write a short 'how to run a meeting' guide for yourself.",
+    "Recruit sheet. Make a one-page club overview to hand out in the fall.",
+    "Ship: fall-launch packet. Sign-ups, first event, and matching plan - ready to go. Summer complete."
+  ]
 };
 function sharonForDay(w,d){
   if(w===1) return {topic:"Scope & brainstorm", detail:sharonWk1[d-1], open:true};
-  return {topic:"Build & pitch", detail:(sharonLater[w]||"Keep moving the proposal forward."), open:false};
+  const wk=sharonWk[w];
+  return {topic:(sharonThemes[w]||"Build & pitch"), detail:(wk?wk[d-1]:"Keep moving the proposal forward."), open:false};
 }
 
 // ============ STATE ============
