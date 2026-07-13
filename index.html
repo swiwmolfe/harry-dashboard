@@ -400,7 +400,7 @@ const SYNC_ID="harry-2026-sww";
 let _syncT=null, _applyingRemote=false;
 function scheduleSync(){ if(_applyingRemote) return; clearTimeout(_syncT); _syncT=setTimeout(pushState,1500); }
 async function pushState(){ try{ await fetch("/api/state",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({key:SYNC_ID,data:mem})}); }catch(e){} }
-async function pullState(){ try{ const r=await fetch("/api/state?key="+encodeURIComponent(SYNC_ID)); if(!r.ok) return; const j=await r.json(); const remote=j&&j.data; if(remote && (remote.updatedAt||0)>(mem.updatedAt||0)){ _applyingRemote=true; mem=remote; try{localStorage.setItem(KEY,JSON.stringify(mem));}catch(e){} _applyingRemote=false; renderSetup(); render(); renderPortfolio(); } else if(!remote){ pushState(); } }catch(e){} }
+async function pullState(){ try{ const r=await fetch("/api/state?key="+encodeURIComponent(SYNC_ID)); if(!r.ok) return; const j=await r.json(); const remote=j&&j.data; if(remote && (remote.updatedAt||0)>(mem.updatedAt||0)){ _applyingRemote=true; mem=remote; try{localStorage.setItem(KEY,JSON.stringify(mem));}catch(e){} _applyingRemote=false; migrateSharonNotes(); renderSetup(); render(); renderPortfolio(); } else if(!remote){ pushState(); } }catch(e){} }
 function cId(w,d,t){return w+"-"+d+"-"+t;}
 function isDone(w,d,t){return !!mem.completed[cId(w,d,t)];}
 function toggle(w,d,t){mem.completed[cId(w,d,t)]=!isDone(w,d,t); save(); render();}
@@ -493,9 +493,10 @@ function render(){
       bodyHtml="<p>"+esc(s.detail)+"</p>"+(s.open?"<p style='font-size:13px;color:#6b7280'>Week 1 is yours to explore - there are no wrong answers yet. You're designing how the club works.</p>":"")+
         timerHtml(cId(w,d,"sharon-timer"),1800)+
         "<div class='journal'>"+
-          "<label class='jlabel'>Project notebook &middot; all your Sharon Buddies notes<span class='savednote' id='ssaved_"+uid+"'></span></label>"+
-          "<textarea class='jarea' id='snote_"+uid+"' style='min-height:140px' placeholder='Your running notes for the whole project - they stay here across every day, and your mentor can see them.'></textarea>"+
+          "<label class='jlabel'>Project notebook &middot; Week "+w+"<span class='savednote' id='ssaved_"+uid+"'></span></label>"+
+          "<textarea class='jarea' id='snote_"+uid+"' style='min-height:140px' placeholder='Your notes for this week - they stay here all week, and your mentor can see them.'></textarea>"+
         "</div>"+
+        "<details class='det'><summary>Earlier weeks&#39; notes</summary><div class='past' id='spast_"+uid+"'></div></details>"+
         "<div class='tutor' id='stutor_"+uid+"'>"+
           "<div class='hint'>Talk it through with your project mentor - it helps you shape the club, not decide for you. (Needs the site deployed.)</div>"+
           "<div class='log' id='stlog_"+uid+"'></div>"+
@@ -701,11 +702,40 @@ function buildReadingPast(curW,curD){
 }
 
 // ============ SHARON BUDDIES NOTES + MENTOR WIRING ============
+// The notebook is per-week (sharon-nb-w{W}): each week starts with a clean field,
+// and earlier weeks are archived read-only under "Earlier weeks' notes".
+function sharonNbKey(w){ return "sharon-nb-w"+w; }
+// One-time move of the old single all-project notebook into Week 1.
+function migrateSharonNotes(){
+  const old=getNote("sharon-notebook");
+  if(old && old.trim() && !getNote(sharonNbKey(1)).trim()){
+    setNote(sharonNbKey(1), old);
+    setNote("sharon-notebook","");
+  }
+}
+function buildSharonPast(curW){
+  let html="";
+  for(let w=1;w<=8;w++){
+    if(w===curW) continue;
+    const txt=getNote(sharonNbKey(w));
+    if(txt && txt.trim()) html+="<div class='pastweek'><div class='pastwk'>Week "+w+"</div><div class='pastitem'><div class='pasttxt'>"+esc(txt)+"</div></div></div>";
+  }
+  return html || "<div style='font-size:13px;color:#94a3b8;padding:6px 0'>No notes from other weeks yet.</div>";
+}
+// The mentor still sees the whole project: this week's notes first, earlier weeks after.
+function sharonNotebookContext(curW){
+  let s="Week "+curW+" (current) notes:\n"+(getNote(sharonNbKey(curW)).trim()||"(empty so far)");
+  let prior="";
+  for(let w=1;w<curW;w++){ const t=getNote(sharonNbKey(w)); if(t && t.trim()) prior+="\n\nWeek "+w+" notes:\n"+t; }
+  return prior ? s+"\n\n--- Earlier weeks ---"+prior : s;
+}
 function wireSharon(card,w,d){
   const uid=w+"_"+d; const s=sharonForDay(w,d);
-  const NB="sharon-notebook";
+  const NB=sharonNbKey(w);
   const nEl=card.querySelector("#snote_"+uid), nSaved=card.querySelector("#ssaved_"+uid);
+  const past=card.querySelector("#spast_"+uid);
   nEl.value=getNote(NB);
+  if(past) past.innerHTML=buildSharonPast(w);
   function flash(){ nSaved.textContent="saved"; clearTimeout(nSaved._t); nSaved._t=setTimeout(function(){ nSaved.textContent=""; },1200); }
   nEl.addEventListener("input",function(){ setNote(NB,nEl.value); flash(); });
   const log=card.querySelector("#stlog_"+uid), input=card.querySelector("#stin_"+uid), sendBtn=card.querySelector("#stsend_"+uid);
@@ -717,7 +747,7 @@ function wireSharon(card,w,d){
     save(); paint();
     const thinking=document.createElement("div"); thinking.className="msg bot"; thinking.textContent="…"; log.appendChild(thinking); log.scrollTop=log.scrollHeight;
     try{
-      const data=await callTutor({mode:"mentor",week:w,phase:s.topic,activity:s.detail,notebook:getNote(NB),messages:convo});
+      const data=await callTutor({mode:"mentor",week:w,phase:s.topic,activity:s.detail,notebook:sharonNotebookContext(w),messages:convo});
       thinking.remove();
       let reply=data.reply||("(mentor unavailable: "+(data.error||"unknown error")+")");
       convo.push({role:"assistant",content:reply}); save(); paint();
@@ -912,7 +942,7 @@ document.getElementById("prev").addEventListener("click",()=>go(-1));
 document.getElementById("next").addEventListener("click",()=>go(1));
 document.getElementById("today").addEventListener("click",()=>{view=todayWD(); render();});
 
-load(); renderSetup(); render(); renderPortfolio();
+load(); migrateSharonNotes(); renderSetup(); render(); renderPortfolio();
 fetch("mathbank.json").then(r=>r.json()).then(d=>{ mathBankW=d; render(); }).catch(()=>{});
 pullState();
 setInterval(pullState, 20000);
