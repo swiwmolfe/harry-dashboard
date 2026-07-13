@@ -181,6 +181,7 @@
 
 // ============ CONFIG ============
 const START_DATE = "2026-07-06"; // Monday of week 1 - change to Harry's real start date
+const NDAYS = 5; // working days per week (Mon-Fri; Sat + Sun are rest days)
 const TRACKS = [
   {key:"responsibility", label:"Responsibility"},
   {key:"reading",        label:"Reading"},
@@ -201,7 +202,7 @@ const reading = {
   8:{book:"The Thrashers (finish)", from:265,to:352, prompt:"Now that you know the ending, which earlier scene reads differently? Then compare the two books: how does each build suspense and handle the truth?"},
 };
 function readingForDay(w,d){
-  const r=reading[w]; const total=r.to-r.from+1; const per=Math.ceil(total/6);
+  const r=reading[w]; const total=r.to-r.from+1; const per=Math.ceil(total/NDAYS);
   const a=r.from+per*(d-1); let b=Math.min(r.from+per*d-1, r.to);
   if(a>r.to) return {book:r.book, pages:"Book finished - reread a favorite scene or bank a buffer day.", prompt:r.prompt};
   return {book:r.book, pages:"pp. "+a+"-"+b, prompt:r.prompt};
@@ -224,10 +225,24 @@ const mathPitfallsW={
   7:"Losing track of the variable mid-trace; AND/OR mix-ups; missing that NOT(NOT A) = A.",
   8:"Swapping x and y; forgetting to square both differences before the square root; averaging wrong for midpoints."
 };
-function mathForDay(w,d){
-  if(w===1) return {topic:mathWk1[d-1], note:"Full problems + answer key are in your Week 1 Starter Pack - or work them with the tutor below."};
+// Raw content for a single lesson d (1..6). The curriculum still holds 6 lessons
+// per week; the 5-day view folds lesson 6 into day 5 (see mathMerged).
+function mathRaw(w,d){
+  if(w===1) return {topic:mathWk1[d-1]||"", problems:mathProblems[d]||[], pitfalls:mathPitfalls[d]||""};
   const wk=mathBankW[w]&&mathBankW[w][d];
-  return {topic: wk?wk.topic:mathTheme[w], note: wk?"Work these with the tutor below, or see the Math Weeks 2-8 packet.":"Today's set: Math Weeks 2-8 packet, Week "+w+" Day "+d+"."};
+  return {topic:(wk?wk.topic:mathTheme[w]), problems:(wk?wk.problems:[]), pitfalls:(mathPitfallsW[w]||"")};
+}
+// Display day d (1..5). Day 5 merges lessons 5 and 6 so no problems are lost.
+function mathMerged(w,d){
+  if(d<5) return mathRaw(w,d);
+  const a=mathRaw(w,5), b=mathRaw(w,6);
+  const topic=(a.topic===b.topic)?a.topic:(a.topic+" + "+b.topic);
+  return {topic:topic, problems:(a.problems||[]).concat(b.problems||[]), pitfalls:a.pitfalls||b.pitfalls};
+}
+function mathForDay(w,d){
+  if(w===1) return {topic:mathMerged(1,d).topic, note:"Full problems + answer key are in your Week 1 Starter Pack - or work them with the tutor below."};
+  const loaded=mathBankW[w]&&mathBankW[w][d<5?d:5];
+  return {topic: loaded?mathMerged(w,d).topic:mathTheme[w], note: loaded?"Work these with the tutor below, or see the Math Weeks 2-8 packet.":"Today's set: Math Weeks 2-8 packet, Week "+w+" Day "+d+"."};
 }
 const mathProblems = {
   1:["5 + 2 x 3","(5 + 2) x 3","20 - 4 x 3 + 2","2 + 3^2","(2 + 3)^2","48 / 8 / 2","10 - (6 - 2) x 2","3 x 4 - 2 x 5"],
@@ -246,9 +261,9 @@ const mathPitfalls = {
   6:"Forgetting that integer division truncates; unsure what % means; mixing up the two println outputs."
 };
 function mathTutorCtx(w,d){
-  if(w===1) return { topic:mathWk1[d-1], problems:mathProblems[d], pitfalls:mathPitfalls[d] };
-  const wk=mathBankW[w]&&mathBankW[w][d];
-  return { topic:(wk?wk.topic:mathTheme[w])+" (Week "+w+")", problems:(wk?wk.problems:[]), pitfalls:(mathPitfallsW[w]||"") };
+  const m=mathMerged(w,d);
+  if(w===1) return { topic:m.topic, problems:m.problems, pitfalls:m.pitfalls };
+  return { topic:m.topic+" (Week "+w+")", problems:m.problems, pitfalls:m.pitfalls };
 }
 
 // ============ CONTENT: CODING ============
@@ -292,6 +307,8 @@ const coding = {
 };
 const doneApp = ["Live on a public URL.","Works on a phone screen.","GitHub repo public, with a README (what it is, how to use it, screenshot).","Commits from across the week.","Link added to your portfolio list."];
 const doneGame = ["Playable from a menu through to game-over and back - no dead ends.","Build runs from a public link (itch.io).","GitHub repo public, with a .gitignore and a README (title, controls, screenshot).","Release tagged v1.0.","Link added to your portfolio list."];
+// 6 build steps folded into 5 days: day 5 does the final polish step, then ships.
+function codingDay(c,d){ if(d<5) return c.days[d-1]; return c.days[4]+"  Then, to finish the week and SHIP: "+c.days[5]; }
 
 // ============ CONTENT: SHARON BUDDIES ============
 const sharonWk1 = [
@@ -364,10 +381,12 @@ const sharonWk = {
     "Ship: fall-launch packet. Sign-ups, first event, and matching plan - ready to go. Summer complete."
   ]
 };
+// 6 activities folded into 5 days: day 5 merges activities 5 and 6 (the wrap-up/ship).
+function sharonDetail(arr,d){ if(!arr) return null; if(d<5) return arr[d-1]; return arr[4]+"  Then: "+arr[5]; }
 function sharonForDay(w,d){
-  if(w===1) return {topic:"Scope & brainstorm", detail:sharonWk1[d-1], open:true};
+  if(w===1) return {topic:"Scope & brainstorm", detail:sharonDetail(sharonWk1,d), open:true};
   const wk=sharonWk[w];
-  return {topic:(sharonThemes[w]||"Build & pitch"), detail:(wk?wk[d-1]:"Keep moving the proposal forward."), open:false};
+  return {topic:(sharonThemes[w]||"Build & pitch"), detail:(wk?sharonDetail(wk,d):"Keep moving the proposal forward."), open:false};
 }
 
 // ============ STATE ============
@@ -400,15 +419,15 @@ function todayWD(){
   let diff=Math.floor((now-start)/86400000);
   if(diff<0) return {week:1,day:1,rest:false};
   let week=Math.floor(diff/7)+1; let dow=((diff%7)+7)%7; // 0=Mon..6=Sun
-  if(week>8) return {week:8,day:6,rest:false};
-  if(dow===6) return {week:week,day:6,rest:true};
+  if(week>8) return {week:8,day:NDAYS,rest:false};
+  if(dow>=NDAYS) return {week:week,day:NDAYS,rest:true}; // Sat & Sun are rest
   return {week:week,day:dow+1,rest:false};
 }
 let view = todayWD();
 function go(delta){
-  let idx=(view.week-1)*6+(view.day-1)+delta;
-  idx=Math.max(0,Math.min(47,idx));
-  view={week:Math.floor(idx/6)+1, day:(idx%6)+1, rest:false};
+  let idx=(view.week-1)*NDAYS+(view.day-1)+delta;
+  idx=Math.max(0,Math.min(8*NDAYS-1,idx));
+  view={week:Math.floor(idx/NDAYS)+1, day:(idx%NDAYS)+1, rest:false};
   render();
 }
 
@@ -435,7 +454,7 @@ function render(){
     if(t.key==="responsibility"){
       const ch=getChoice(w,d);
       sub=ch?("Today: "+ch):"Pick one";
-      bodyHtml="<p>Pick your chore for today and check it off. Aim for roughly 3 dish days to 1 dog day across the week.</p>"+
+      bodyHtml="<p>Pick your chore for today and check it off. Aim for roughly 3 dish days to 2 dog days across the week.</p>"+
         "<div class='choice'><button data-ch='Dishes' class='"+(ch==='Dishes'?'sel':'')+"'>Dishes</button>"+
         "<button data-ch='Walk the dog' class='"+(ch==='Walk the dog'?'sel':'')+"'>Walk the dog</button></div>";
     } else if(t.key==="reading"){
@@ -490,7 +509,7 @@ function render(){
         timerHtml(cId(w,d,"coding-timer"),3600)+
         (c.mini?("<div class='mini'><b>Mini-lesson:</b> "+esc(c.mini)+"</div>"):"")+
         (c.type==="app"?("<div class='sblink'>Build it in <b>StackBlitz</b> (stackblitz.com) - a code editor that runs in your browser with a live preview, nothing to install.</div>"):"")+
-        "<p><b>Today (Day "+d+"):</b> "+esc(c.days[d-1])+"</p>"+
+        "<p><b>Today (Day "+d+"):</b> "+esc(codingDay(c,d))+"</p>"+
         "<details class='det'><summary>This week's Definition of Done</summary>"+
         "<ul class='done-list'>"+done.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul></details>"+
         "<div class='linkrow'>"+
@@ -796,17 +815,17 @@ async function runPython(src,outEl){
 // ============ STREAK + MAP ============
 function renderStreak(){
   const t=todayWD(); let streak=0;
-  let idx=(t.week-1)*6+(t.day-1);
-  for(let i=idx;i>=0;i--){ const w=Math.floor(i/6)+1, d=(i%6)+1; if(dayComplete(w,d)) streak++; else break; }
+  let idx=(t.week-1)*NDAYS+(t.day-1);
+  for(let i=idx;i>=0;i--){ const w=Math.floor(i/NDAYS)+1, d=(i%NDAYS)+1; if(dayComplete(w,d)) streak++; else break; }
   document.getElementById("streakNum").textContent=streak;
 }
 function renderMap(){
   let html="<table class='map'><tr><th></th>";
-  for(let d=1;d<=6;d++) html+="<th>D"+d+"</th>";
+  for(let d=1;d<=NDAYS;d++) html+="<th>D"+d+"</th>";
   html+="</tr>";
   for(let w=1;w<=8;w++){
     html+="<tr><td class='weeklabel'>Wk "+w+"</td>";
-    for(let d=1;d<=6;d++){
+    for(let d=1;d<=NDAYS;d++){
       const n=TRACKS.filter(t=>isDone(w,d,t.key)).length;
       const full=n===5; const frac=n/5;
       let bg = n===0?"#eef2f7":(full?"#2E7D32":"rgba(46,125,50,"+(0.25+frac*0.5)+")");
