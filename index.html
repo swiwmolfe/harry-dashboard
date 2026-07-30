@@ -781,6 +781,10 @@ async function callTutor(payload){
   var data=null; try{ data=JSON.parse(text); }catch(e){}
   if(!data){
     if(r.status===413) return {error:"that message was too big to send - clear the chat (or send fewer/smaller screenshots) and try again"};
+    // A gateway timeout returns a big HTML error page; never paste that into the chat.
+    if(r.status===504||r.status===408) return {error:"that one took too long and the server cut it off - try a shorter question, or clear the chat and ask again"};
+    if(r.status===502||r.status===503) return {error:"the server is briefly unavailable - wait a few seconds and send it again"};
+    if(r.status>=500) return {error:"the server hit an error ("+r.status+") - wait a few seconds and try again"};
     return {error:"server error "+r.status+(text?": "+text.slice(0,120):"")};
   }
   if(data.reply && String(data.reply).trim()) return {reply:data.reply};

@@ -83,44 +83,83 @@ function parseRepo(url) {
   if (m) return { owner: m[1], repo: m[2] };
   return null;
 }
-async function ghFetch(path) {
+// ---- Time budget -------------------------------------------------------
+// vercel.json gives this function 60s. We stop ourselves before that so we can
+// always return a real JSON answer; blowing the Vercel limit yields a raw HTML
+// 504 (FUNCTION_INVOCATION_TIMEOUT) that the chat UI can only print verbatim.
+const FN_BUDGET_MS = 55000;   // hard stop for the whole request
+const REPO_BUDGET_MS = 12000; // most we'll spend reading GitHub
+const GH_CALL_MS = 6000;      // per GitHub call
+
+// fetch with an abort timeout, so a hung upstream can never eat the whole budget.
+async function fetchT(url, opts, ms) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), Math.max(500, ms));
+  try {
+    return await fetch(url, Object.assign({}, opts, { signal: ac.signal }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function ghFetch(path, ms) {
   const headers = { "accept": "application/vnd.github+json", "user-agent": "harry-dashboard" };
   if (process.env.GITHUB_TOKEN) headers["authorization"] = "Bearer " + process.env.GITHUB_TOKEN;
-  const r = await fetch("https://api.github.com" + path, { headers });
+  const r = await fetchT("https://api.github.com" + path, { headers }, ms || GH_CALL_MS);
   if (!r.ok) throw new Error("GitHub API " + r.status);
   return r.json();
+}
+
+// Repo context is identical for every message until Harry pushes a new commit,
+// but it used to be re-fetched on EVERY turn (up to 17 GitHub calls, serially).
+// Cache it per commit sha on the warm instance: one call per turn instead.
+const repoCache = new Map();
+const REPO_TTL_MS = 15 * 60 * 1000;
+function cacheGet(k) {
+  const hit = repoCache.get(k);
+  if (!hit) return null;
+  if (Date.now() - hit.at > REPO_TTL_MS) { repoCache.delete(k); return null; }
+  return hit.ctx;
+}
+function cacheSet(k, ctx) {
+  if (repoCache.size > 12) repoCache.clear();
+  repoCache.set(k, { ctx, at: Date.now() });
 }
 // Which files are worth reading as source code, and which paths are build/IDE noise to skip.
 const CODE_EXT = /\.(cs|js|jsx|ts|tsx|py|java|kt|cpp|cc|cxx|c|h|hpp|hlsl|shader|compute|glsl|gd|lua|rb|go|rs|php|swift|html|css|scss|json|md|txt|yml|yaml)$/i;
 const SKIP_PATH = /(^|\/)(node_modules|Library|Temp|Obj|obj|Build|Builds|bin|\.git|\.vs|\.idea|Logs|UserSettings)\//i;
 const SKIP_FILE = /(\.meta|\.asset|\.prefab|\.unity|\.min\.js|\.lock|package-lock\.json)$/i;
 
-async function fetchRepoContext(repoUrl) {
+async function fetchRepoContext(repoUrl, deadlineAt) {
   const pr = parseRepo(repoUrl);
   if (!pr) return "";
+  const left = () => deadlineAt - Date.now();
   const commits = await ghFetch(`/repos/${pr.owner}/${pr.repo}/commits?per_page=1`);
   if (!Array.isArray(commits) || !commits.length) return `\n\nHARRY'S REPO (${pr.owner}/${pr.repo}): no commits yet.`;
   const sha = commits[0].sha;
   const msg = (commits[0].commit && commits[0].commit.message) || "";
 
-  // Recent changes: the latest commit's diff (what he's actively working on).
+  // Same commit as last turn? Reuse the context instead of re-reading GitHub.
+  const cacheKey = `${pr.owner}/${pr.repo}@${sha}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  // Latest commit diff + whole repo tree, in parallel (they don't depend on each other).
+  const [commitRes, treeRes] = await Promise.allSettled([
+    ghFetch(`/repos/${pr.owner}/${pr.repo}/commits/${sha}`),
+    ghFetch(`/repos/${pr.owner}/${pr.repo}/git/trees/${sha}?recursive=1`),
+  ]);
+
   let diff = "";
   const changedNames = new Set();
-  try {
-    const commit = await ghFetch(`/repos/${pr.owner}/${pr.repo}/commits/${sha}`);
-    (commit.files || []).slice(0, 8).forEach(f => {
+  if (commitRes.status === "fulfilled") {
+    ((commitRes.value && commitRes.value.files) || []).slice(0, 8).forEach(f => {
       if (f.status !== "removed") changedNames.add(f.filename);
       diff += `\n* ${f.filename} (${f.status}, +${f.additions || 0}/-${f.deletions || 0})`;
       if (f.patch) diff += "\n" + f.patch.slice(0, 1200);
     });
-  } catch (e) { /* diff is optional */ }
-
-  // Whole repo tree (one call), so the coach sees the full structure.
-  let tree = [];
-  try {
-    const t = await ghFetch(`/repos/${pr.owner}/${pr.repo}/git/trees/${sha}?recursive=1`);
-    tree = (t && t.tree) || [];
-  } catch (e) { /* fall back to changed-files-only below */ }
+  }
+  const tree = (treeRes.status === "fulfilled" && treeRes.value && treeRes.value.tree) || [];
 
   // Choose source files to actually read: real code, not too big; prefer files
   // touched in the latest commit, then smallest-first to fit more in the budget.
@@ -131,20 +170,25 @@ async function fetchRepoContext(repoUrl) {
     return (a.size || 0) - (b.size || 0);
   });
 
-  const MAX_FILES = 14, MAX_PER_FILE = 4000, MAX_TOTAL = 42000;
+  const MAX_FILES = 10, MAX_PER_FILE = 3500, MAX_TOTAL = 28000;
+  // Read the chosen files CONCURRENTLY. Serially this was up to 14 round trips
+  // stacked end to end, which is what pushed slow turns past the function limit.
+  const picks = blobs.slice(0, MAX_FILES);
+  const fetched = await Promise.allSettled(picks.map(async b => {
+    if (left() <= 1500) return null;
+    const path = b.path.split("/").map(encodeURIComponent).join("/");
+    const c = await ghFetch(`/repos/${pr.owner}/${pr.repo}/contents/${path}?ref=${sha}`, Math.min(GH_CALL_MS, Math.max(1000, left())));
+    if (!c || !c.content) return null;
+    return { path: b.path, txt: Buffer.from(c.content, c.encoding || "base64").toString("utf8").slice(0, MAX_PER_FILE) };
+  }));
+
   let contents = "", used = 0, shown = 0;
-  for (const b of blobs) {
-    if (shown >= MAX_FILES || used >= MAX_TOTAL) break;
-    try {
-      const path = b.path.split("/").map(encodeURIComponent).join("/");
-      const c = await ghFetch(`/repos/${pr.owner}/${pr.repo}/contents/${path}?ref=${sha}`);
-      if (c && c.content) {
-        const txt = Buffer.from(c.content, c.encoding || "base64").toString("utf8").slice(0, MAX_PER_FILE);
-        const tag = changedNames.has(b.path) ? " (current, changed in latest commit)" : " (current)";
-        contents += `\n\n--- ${b.path}${tag} ---\n${txt}`;
-        used += txt.length; shown++;
-      }
-    } catch (e) { /* skip unreadable file */ }
+  for (const r of fetched) {
+    if (r.status !== "fulfilled" || !r.value) continue;   // skip unreadable/slow files
+    if (used >= MAX_TOTAL) break;
+    const tag = changedNames.has(r.value.path) ? " (current, changed in latest commit)" : " (current)";
+    contents += `\n\n--- ${r.value.path}${tag} ---\n${r.value.txt}`;
+    used += r.value.txt.length; shown++;
   }
 
   // Full listing of every file (paths only), so he can ask about anything by name.
@@ -153,11 +197,66 @@ async function fetchRepoContext(repoUrl) {
   const treeNote = listing ? `\n\nFULL FILE LIST (${allPaths.length} files):\n${listing}` : "";
   const shownNote = shown ? `\n\n(The ${shown} most relevant source files are included in full below. If you need a file that's in the list but not shown, ask Harry to paste it.)` : "";
 
-  return `\n\nHARRY'S REPO (${pr.owner}/${pr.repo})\nLatest commit: ${String(msg).slice(0, 200)}\nRecent changes (latest commit diff):${diff}${treeNote}${shownNote}${contents}`;
+  const ctx = `\n\nHARRY'S REPO (${pr.owner}/${pr.repo})\nLatest commit: ${String(msg).slice(0, 200)}\nRecent changes (latest commit diff):${diff}${treeNote}${shownNote}${contents}`;
+  cacheSet(cacheKey, ctx);
+  return ctx;
+}
+
+// ---- Anthropic (streamed) ----------------------------------------------
+// Streaming matters here for a specific reason: a non-streamed call returns
+// nothing until the model is completely done, so a long reply that runs past the
+// function limit produces a 504 and Harry loses the whole answer. Streaming lets
+// us keep what has arrived and hand back a partial reply instead of an error.
+async function streamAnthropic(payload, signal, sink) {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": process.env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify(Object.assign({}, payload, { stream: true })),
+    signal,
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    const err = new Error("anthropic_http_" + r.status);
+    err.httpStatus = r.status;
+    err.detail = t.slice(0, 600);
+    throw err;
+  }
+  const reader = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line.startsWith("data:")) continue;
+      const raw = line.slice(5).trim();
+      if (!raw || raw === "[DONE]") continue;
+      let ev;
+      try { ev = JSON.parse(raw); } catch (e) { continue; }
+      if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") {
+        sink.text += ev.delta.text;
+      } else if (ev.type === "message_delta" && ev.delta && ev.delta.stop_reason) {
+        sink.stop_reason = ev.delta.stop_reason;
+      } else if (ev.type === "error") {
+        const err = new Error("anthropic_stream_error");
+        err.detail = JSON.stringify(ev.error || ev).slice(0, 600);
+        throw err;
+      }
+    }
+  }
 }
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") { res.status(405).json({ error: "POST only" }); return; }
+  const deadlineAt = Date.now() + FN_BUDGET_MS;
   try {
     let body = req.body;
     if (typeof body === "string") body = JSON.parse(body || "{}");
@@ -174,7 +273,14 @@ module.exports = async (req, res) => {
       const { project = "", type = "", goal = "", phase = "", dayNum = 0, dod = [], repo = "" } = body;
       const dodText = (dod && dod.length) ? dod.map((x, i) => `${i + 1}) ${x}`).join("\n") : "(none listed)";
       let context = `PROJECT: ${project} (${type})${goal ? " - " + goal : ""}\nTODAY'S PHASE (Day ${dayNum} of 6): ${phase}\nDEFINITION OF DONE (this week):\n${dodText}`;
-      if (repo) { try { context += await fetchRepoContext(repo); } catch (e) { context += "\n\n(Could not read the GitHub repo: " + ((e && e.message) || e) + ")"; } }
+      if (repo) {
+        const repoDeadline = Math.min(deadlineAt - 20000, Date.now() + REPO_BUDGET_MS);
+        try { context += await fetchRepoContext(repo, repoDeadline); }
+        catch (e) {
+          const why = (e && e.name === "AbortError") ? "GitHub was too slow to answer" : ((e && e.message) || String(e));
+          context += "\n\n(Could not read the GitHub repo: " + why + ". Ask Harry to paste the relevant file.)";
+        }
+      }
       system = CODING_SYSTEM + "\n\n---\n" + context;
     } else if (mode === "mentor") {
       const { week = 0, phase = "", activity = "", notebook = "" } = body;
@@ -216,36 +322,60 @@ module.exports = async (req, res) => {
         }
       }
     }
+    // Sanitise before sending: the API rejects image blocks on assistant turns and
+    // rejects a final assistant turn ending in whitespace. Either one 502s the chat.
+    msgs = msgs.map(m => {
+      if (m.role === "assistant" && Array.isArray(m.content)) {
+        const txt = m.content.filter(b => b.type === "text").map(b => b.text).join(" ");
+        return { role: "assistant", content: txt || "(screenshot)" };
+      }
+      return m;
+    });
+    msgs = msgs.filter(m => Array.isArray(m.content) ? m.content.length : String(m.content || "").trim());
+    if (msgs.length && msgs[msgs.length - 1].role === "assistant" && typeof msgs[msgs.length - 1].content === "string") {
+      msgs[msgs.length - 1] = { role: "assistant", content: msgs[msgs.length - 1].content.replace(/\s+$/, "") };
+    }
     if (msgs.length === 0) msgs.push({ role: "user", content: "Let's start." });
 
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({ model: MODEL, max_tokens: MAX_TOKENS, system, messages: msgs }),
-    });
+    // Stream, with a hard stop before Vercel's own limit. Whatever text has
+    // arrived by then is still a useful answer; a 504 is not.
+    const sink = { text: "", stop_reason: null };
+    const ac = new AbortController();
+    const msLeft = Math.max(3000, deadlineAt - Date.now());
+    const timer = setTimeout(() => ac.abort(), msLeft);
+    let timedOut = false, failed = null;
+    try {
+      await streamAnthropic({ model: MODEL, max_tokens: MAX_TOKENS, system, messages: msgs }, ac.signal, sink);
+    } catch (e) {
+      if (e && (e.name === "AbortError" || ac.signal.aborted)) timedOut = true;
+      else failed = e;
+    } finally {
+      clearTimeout(timer);
+    }
 
-    if (!r.ok) {
-      const t = await r.text();
-      res.status(502).json({ error: "Anthropic API error", detail: t.slice(0, 600) });
+    if (failed && !sink.text) {
+      res.status(502).json({ error: "Anthropic API error", detail: String(failed.detail || failed.message || failed).slice(0, 600) });
       return;
     }
-    const data = await r.json();
-    const reply = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
-    if (!reply) {
-      // No visible text came back (e.g. the model hit the token cap while
-      // reasoning). Tell the client instead of returning a blank message.
-      const why = data.stop_reason === "max_tokens"
-        ? "the reply got cut off before any text - try a shorter question or ask about one file at a time"
-        : "the model returned an empty reply - try rephrasing";
-      res.status(200).json({ error: why });
-      return;
+
+    let reply = (sink.text || "").trim();
+    if (reply && timedOut) {
+      // Partial answer: keep the progress marker valid and tell Harry it was cut off.
+      reply = reply.replace(/<progress>[\s\S]*$/i, "").trim() +
+        "\n\n(...I ran out of time mid-answer. Ask me to keep going and I'll pick up from here.)";
     }
-    res.status(200).json({ reply });
+    if (reply) { res.status(200).json({ reply }); return; }
+
+    // Nothing came back at all.
+    let why;
+    if (timedOut) why = "that took too long to answer - try a shorter question, or ask about one file at a time";
+    else if (sink.stop_reason === "max_tokens") why = "the reply got cut off before any text - try a shorter question or ask about one file at a time";
+    else why = "the model returned an empty reply - try rephrasing";
+    res.status(200).json({ error: why });
   } catch (e) {
-    res.status(500).json({ error: String((e && e.message) || e) });
+    const msg = (e && e.name === "AbortError")
+      ? "that took too long to answer - try a shorter question, or clear the chat and ask again"
+      : String((e && e.message) || e);
+    res.status(500).json({ error: msg });
   }
 };
