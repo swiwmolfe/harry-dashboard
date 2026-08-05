@@ -785,6 +785,11 @@ async function callTutor(payload){
     if(r.status===504||r.status===408) return {error:"that one took too long and the server cut it off - try a shorter question, or clear the chat and ask again"};
     if(r.status===502||r.status===503) return {error:"the server is briefly unavailable - wait a few seconds and send it again"};
     if(r.status>=500) return {error:"the server hit an error ("+r.status+") - wait a few seconds and try again"};
+    // Last resort. Never echo the body if it's an HTML error page or a Vercel
+    // deployment-error blob - that's where "FUNCTION_INVOCATION_TIMEOUT <random id>"
+    // used to leak into the chat and read as gibberish.
+    var looksLikePage=/^\s*</.test(text)||/FUNCTION_INVOCATION|An error occurred with your deployment|DEPLOYMENT_/i.test(text);
+    if(looksLikePage) return {error:"the server cut that one off ("+r.status+") - wait a few seconds and send it again"};
     return {error:"server error "+r.status+(text?": "+text.slice(0,120):"")};
   }
   if(data.reply && String(data.reply).trim()) return {reply:data.reply};
