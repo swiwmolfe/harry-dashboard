@@ -87,7 +87,12 @@ function parseRepo(url) {
 // vercel.json gives this function 60s. We stop ourselves before that so we can
 // always return a real JSON answer; blowing the Vercel limit yields a raw HTML
 // 504 (FUNCTION_INVOCATION_TIMEOUT) that the chat UI can only print verbatim.
-const FN_BUDGET_MS = 55000;   // hard stop for the whole request
+// Vercel's own limit is 60s (vercel.json maxDuration) and its clock starts when
+// the REQUEST arrives, while this budget starts when the handler runs - i.e. after
+// Vercel has finished buffering the upload. On a screenshot turn that upload is
+// ~2MB, so a 55s budget could still land past 60s and produce a raw 504.
+// 45s leaves real headroom for a slow upload plus the retries below.
+const FN_BUDGET_MS = 45000;   // hard stop for the whole request
 const REPO_BUDGET_MS = 12000; // most we'll spend reading GitHub
 const GH_CALL_MS = 6000;      // per GitHub call
 
@@ -254,6 +259,80 @@ async function streamAnthropic(payload, signal, sink) {
   }
 }
 
+// The API hands back a transient "Overloaded" (529) or a rate-limit often enough
+// that with no retry at all a single blip becomes a dead-end error in Harry's
+// chat. Observed live Aug 5 2026: small requests sailed through while the
+// larger repo-context ones failed ~8 times in a row inside one bad window, then
+// recovered on their own. Everything below turns those windows into a pause
+// instead of a failure.
+const RETRY_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504, 520, 529]);
+function isRetryableUpstream(e) {
+  if (!e) return false;
+  if (e.name === "AbortError") return false;              // that's our own deadline
+  if (e.httpStatus && RETRY_STATUS.has(e.httpStatus)) return true;
+  const d = String(e.detail || e.message || "");
+  return /overloaded|rate_limit|api_error|ECONNRESET|ETIMEDOUT|socket hang up|fetch failed/i.test(d);
+}
+
+// One attempt, with its own abort signal derived from the remaining budget.
+async function attemptStream(payload, sink, msLeft) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), Math.max(3000, msLeft));
+  try {
+    await streamAnthropic(payload, ac.signal, sink);
+    return { timedOut: false, failed: null, aborted: ac.signal.aborted };
+  } catch (e) {
+    const aborted = (e && e.name === "AbortError") || ac.signal.aborted;
+    return { timedOut: aborted, failed: aborted ? null : e, aborted };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Retry on transient upstream failures, then - if it still won't go through -
+// try once more with a smaller request (repo file contents dropped, file list
+// kept). A slightly less-informed answer beats no answer.
+async function streamWithRetry({ model, max_tokens, system, systemLite, messages, deadlineAt, sink }) {
+  const BACKOFF_MS = [700, 1800, 4000];
+  let lastFailed = null;
+  const variants = systemLite && systemLite !== system ? [system, systemLite] : [system];
+
+  for (let v = 0; v < variants.length; v++) {
+    const tries = v === 0 ? BACKOFF_MS.length + 1 : 1;
+    for (let attempt = 0; attempt < tries; attempt++) {
+      const msLeft = deadlineAt - Date.now();
+      if (msLeft < 6000) return { timedOut: true, failed: lastFailed, shrunk: v > 0 };
+
+      const r = await attemptStream({ model, max_tokens, system: variants[v], messages }, sink, msLeft);
+
+      // Any text at all is a usable answer - never retry over the top of it,
+      // that would duplicate what Harry already has.
+      if (sink.text) return { timedOut: r.timedOut, failed: null, shrunk: v > 0 };
+      if (r.timedOut) return { timedOut: true, failed: null, shrunk: v > 0 };
+      if (!r.failed) return { timedOut: false, failed: null, shrunk: v > 0 };
+
+      lastFailed = r.failed;
+      if (!isRetryableUpstream(r.failed)) return { timedOut: false, failed: r.failed, shrunk: v > 0 };
+
+      const wait = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
+      if (attempt < tries - 1 && deadlineAt - Date.now() > wait + 6000) {
+        await new Promise(res => setTimeout(res, wait));
+      }
+    }
+  }
+  return { timedOut: false, failed: lastFailed, shrunk: variants.length > 1 };
+}
+
+// The repo block is "header + file list + full contents of the top N files".
+// Dropping just the contents cuts the request by ~28k chars while the coach can
+// still see every filename and the latest diff.
+function stripRepoFileContents(ctx) {
+  if (!ctx) return ctx;
+  const cut = ctx.indexOf("\n\n--- ");
+  if (cut < 0) return ctx;
+  return ctx.slice(0, cut) + "\n\n(File contents left out of this request to keep it small - ask Harry to paste any file you need to read.)";
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") { res.status(405).json({ error: "POST only" }); return; }
   const deadlineAt = Date.now() + FN_BUDGET_MS;
@@ -268,20 +347,22 @@ module.exports = async (req, res) => {
       return;
     }
 
-    let system;
+    let system, systemLite = null;
     if (mode === "coding") {
       const { project = "", type = "", goal = "", phase = "", dayNum = 0, dod = [], repo = "" } = body;
       const dodText = (dod && dod.length) ? dod.map((x, i) => `${i + 1}) ${x}`).join("\n") : "(none listed)";
       let context = `PROJECT: ${project} (${type})${goal ? " - " + goal : ""}\nTODAY'S PHASE (Day ${dayNum} of 6): ${phase}\nDEFINITION OF DONE (this week):\n${dodText}`;
+      let repoCtx = "";
       if (repo) {
-        const repoDeadline = Math.min(deadlineAt - 20000, Date.now() + REPO_BUDGET_MS);
-        try { context += await fetchRepoContext(repo, repoDeadline); }
+        const repoDeadline = Math.min(deadlineAt - 15000, Date.now() + REPO_BUDGET_MS);
+        try { repoCtx = await fetchRepoContext(repo, repoDeadline); }
         catch (e) {
           const why = (e && e.name === "AbortError") ? "GitHub was too slow to answer" : ((e && e.message) || String(e));
-          context += "\n\n(Could not read the GitHub repo: " + why + ". Ask Harry to paste the relevant file.)";
+          repoCtx = "\n\n(Could not read the GitHub repo: " + why + ". Ask Harry to paste the relevant file.)";
         }
       }
-      system = CODING_SYSTEM + "\n\n---\n" + context;
+      system = CODING_SYSTEM + "\n\n---\n" + context + repoCtx;
+      if (repoCtx) systemLite = CODING_SYSTEM + "\n\n---\n" + context + stripRepoFileContents(repoCtx);
     } else if (mode === "mentor") {
       const { week = 0, phase = "", activity = "", notebook = "" } = body;
       const nb = notebook ? `\n\nHARRY'S PROJECT NOTEBOOK (his own running notes - read them, build on them, refer back to what he's decided):\n${String(notebook).slice(0, 8000)}` : "";
@@ -340,21 +421,21 @@ module.exports = async (req, res) => {
     // Stream, with a hard stop before Vercel's own limit. Whatever text has
     // arrived by then is still a useful answer; a 504 is not.
     const sink = { text: "", stop_reason: null };
-    const ac = new AbortController();
-    const msLeft = Math.max(3000, deadlineAt - Date.now());
-    const timer = setTimeout(() => ac.abort(), msLeft);
-    let timedOut = false, failed = null;
-    try {
-      await streamAnthropic({ model: MODEL, max_tokens: MAX_TOKENS, system, messages: msgs }, ac.signal, sink);
-    } catch (e) {
-      if (e && (e.name === "AbortError" || ac.signal.aborted)) timedOut = true;
-      else failed = e;
-    } finally {
-      clearTimeout(timer);
-    }
+    const { timedOut, failed } = await streamWithRetry({
+      model: MODEL, max_tokens: MAX_TOKENS, system, systemLite, messages: msgs, deadlineAt, sink,
+    });
 
     if (failed && !sink.text) {
-      res.status(502).json({ error: "Anthropic API error", detail: String(failed.detail || failed.message || failed).slice(0, 600) });
+      const detail = String(failed.detail || failed.message || failed);
+      // Transient capacity/rate blips already got several retries by here. Say so
+      // in words Harry can act on instead of leaking the raw API error.
+      const busy = /overloaded|rate_limit/i.test(detail);
+      res.status(200).json({
+        error: busy
+          ? "the AI service is busy right now - I tried a few times. Give it about a minute and send that again."
+          : "the coach hit a server error - wait a few seconds and send it again",
+        detail: detail.slice(0, 600),
+      });
       return;
     }
 
