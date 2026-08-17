@@ -180,8 +180,9 @@
 "use strict";
 
 // ============ CONFIG ============
-const START_DATE = "2026-07-06"; // Monday of week 1 - change to Harry's real start date
+const START_DATE = "2026-07-13"; // Monday the plan is anchored to (shifted 1 week to absorb the vacation)
 const NDAYS = 5; // working days per week (Mon-Fri; Sat + Sun are rest days)
+const NWEEKS = 6; // total weeks in the plan (chopped from 8 to 6)
 const TRACKS = [
   {key:"responsibility", label:"Responsibility"},
   {key:"reading",        label:"Reading"},
@@ -197,7 +198,7 @@ const reading = {
   3:{book:"Death in the Clouds", from:151,to:225, prompt:"Who's your prime suspect now, and what changed your mind? What is Poirot noticing that others miss?"},
   4:{book:"Death in the Clouds (finish)", from:226,to:300, prompt:"Did the solution feel earned? Which clue did you underrate, and why did it slip past you?"},
   5:{book:"The Thrashers", from:1,  to:88,  prompt:"Meet the Thrashers. What does Jodi gain, and give up, to be part of the group?"},
-  6:{book:"The Thrashers", from:89, to:176, prompt:"Name one thing you don't fully trust the narrator about. What is Soto revealing vs. holding back?"},
+  6:{book:"The Thrashers (finish)", from:89, to:352, prompt:"Big reading week - finish the book. Now that you know the ending, which earlier scene reads differently? Then compare the two books: how does each build suspense and handle the truth?"},
   7:{book:"The Thrashers", from:177,to:264, prompt:"Pick a character and describe one choice driven by wanting to belong. What did it cost them?"},
   8:{book:"The Thrashers (finish)", from:265,to:352, prompt:"Now that you know the ending, which earlier scene reads differently? Then compare the two books: how does each build suspense and handle the truth?"},
 };
@@ -292,9 +293,10 @@ const coding = {
   5:{title:"First Unreal game (Blueprints)", type:"game", goal:"Your first Unreal project - all Blueprints, no C++ to learn first.",
      days:["Install Unreal; new Blueprint project; get comfortable in the editor.","Player pawn + input (Blueprints) moving around.",
            "One simple goal/mechanic: collect, avoid, or reach.","Win/lose + restart.","Package a build and confirm the packaged app runs.","SHIP: packaged build + itch.io + README + repo."]},
-  6:{title:"Communication board (web)", type:"app", goal:"Taps become spoken words - a simple AAC board using text-to-speech.",
-     days:["New StackBlitz project; plan a grid of picture/word buttons.","Build the button grid.","Wire the Web Speech API: tap a button -> it speaks the word.",
-           "Build a sentence strip from taps; speak the whole sentence.","Accessibility: big buttons, high contrast, simple categories.","SHIP: README, publish live link, portfolio."]},
+  6:{title:"Simple 3v3 arena (Unreal, Blueprints)", type:"game", goal:"The capstone. Local / vs-bots 3v3 - you + 2 ally bots vs 3 enemy bots. Simple on purpose.",
+     days:["New Unreal Blueprint project; arena blockout; player controller.","Player action/ability (one simple thing).",
+           "AI bots: a basic enemy that moves and targets (Blueprints AI).","Teams: 3 vs 3; a team wins when the other is down.",
+           "HUD: team scores/health, win screen, restart. Balance it.","SHIP: packaged build + itch.io + README + repo. Capstone done."]},
   7:{title:"Simple 3v3 arena (Unreal, Blueprints)", type:"game", goal:"The capstone. Local / vs-bots 3v3 - you + 2 ally bots vs 3 enemy bots. Simple on purpose.",
      days:["New Unreal Blueprint project; arena blockout; player controller.","Player action/ability (one simple thing).",
            "AI bots: a basic enemy that moves and targets (Blueprints AI).","Teams: 3 vs 3; a team wins when the other is down.",
@@ -321,7 +323,7 @@ const sharonWk1 = [
 ];
 const sharonThemes = {
   2:"Two paths: scope them both", 3:"Build the pitch (both options)", 4:"Line up allies, get real answers",
-  5:"Pressure-test both", 6:"Rehearse", 7:"Pitch the district", 8:"Set up the fall launch"
+  5:"Pressure-test both", 6:"Pitch the district"
 };
 const sharonWk = {
   2:[
@@ -357,12 +359,12 @@ const sharonWk = {
     "SHIP: a stronger brief. Revised options brief plus a Q&A cheat sheet. That's your Week 5 ship."
   ],
   6:[
-    "Say it out loud. Practice your pitch standing up and timed. Notice where you stumble.",
-    "Watch yourself. Record it on your phone, watch it back, and pick two things to fix.",
+    "Say it out loud. Practice your pitch standing up and timed. Notice where you stumble, then tighten those spots.",
     "Prep the two killer objections. 'Why not just do Best Buddies, they've already solved this?' and 'Why take on a national organization when you could just run a club?' Have a calm, honest answer to each.",
-    "Mock pitch. Give the pitch to a family member and ask for one thing to improve.",
-    "Final polish. Tighten your slides and talking points based on the practice.",
-    "SHIP: pitch-ready. A rehearsed, confident pitch you could give tomorrow. That's your Week 6 ship."
+    "Confirm and prep. Confirm the meeting, get your materials printed or loaded, and do one calm run-through.",
+    "Give the pitch. Present both options, then your recommendation, then the ask. Breathe - you've prepared for this.",
+    "Capture it. Right after, write down every question they asked, which way they leaned, and anything you promised to follow up on.",
+    "SHIP: pitch delivered, project capped. Send the thank-you with anything they asked for, and write the next steps for a fall launch - whichever path they chose, or a plan to pitch again if you got a 'not yet'. Summer complete."
   ],
   7:[
     "Confirm and prep. Confirm the meeting and get your materials printed or loaded.",
@@ -419,14 +421,14 @@ function todayWD(){
   let diff=Math.floor((now-start)/86400000);
   if(diff<0) return {week:1,day:1,rest:false};
   let week=Math.floor(diff/7)+1; let dow=((diff%7)+7)%7; // 0=Mon..6=Sun
-  if(week>8) return {week:8,day:NDAYS,rest:false};
+  if(week>NWEEKS) return {week:NWEEKS,day:NDAYS,rest:false};
   if(dow>=NDAYS) return {week:week,day:NDAYS,rest:true}; // Sat & Sun are rest
   return {week:week,day:dow+1,rest:false};
 }
 let view = todayWD();
 function go(delta){
   let idx=(view.week-1)*NDAYS+(view.day-1)+delta;
-  idx=Math.max(0,Math.min(8*NDAYS-1,idx));
+  idx=Math.max(0,Math.min(NWEEKS*NDAYS-1,idx));
   view={week:Math.floor(idx/NDAYS)+1, day:(idx%NDAYS)+1, rest:false};
   render();
 }
@@ -684,7 +686,7 @@ function wireReading(card,w,d){
 }
 function buildReadingPast(curW,curD){
   let html="";
-  for(let w=1;w<=8;w++){
+  for(let w=1;w<=NWEEKS;w++){
     let weekHtml="";
     for(let d=1;d<=6;d++){
       if(w===curW && d===curD) continue;
@@ -862,7 +864,7 @@ function renderMap(){
   let html="<table class='map'><tr><th></th>";
   for(let d=1;d<=NDAYS;d++) html+="<th>D"+d+"</th>";
   html+="</tr>";
-  for(let w=1;w<=8;w++){
+  for(let w=1;w<=NWEEKS;w++){
     html+="<tr><td class='weeklabel'>Wk "+w+"</td>";
     for(let d=1;d<=NDAYS;d++){
       const n=TRACKS.filter(t=>isDone(w,d,t.key)).length;
@@ -905,7 +907,7 @@ function renderSetup(){
 }
 function renderPortfolio(){
   const el=document.getElementById("portfolio"); if(!el) return; let html="";
-  for(let w=1;w<=8;w++){ const c=coding[w]; const live=getNote("live-"+w), repo=getNote("repo-"+w);
+  for(let w=1;w<=NWEEKS;w++){ const c=coding[w]; const live=getNote("live-"+w), repo=getNote("repo-"+w);
     html+="<div class='pfrow'><span class='wk'>Wk "+w+"</span><span class='nm'>"+esc(c.title)+" <span class='pill "+c.type+"' style='font-size:9px'>"+c.type.toUpperCase()+"</span></span>"+
       (live?("<a href='"+esc(live)+"' target='_blank' rel='noopener'>Live</a>"):"<span class='none'>no link</span>")+
       (repo?("<a href='"+esc(repo)+"' target='_blank' rel='noopener'>Repo</a>"):"<span class='none'>no repo</span>")+"</div>"; }
